@@ -53,7 +53,7 @@ function getAudioContext(): AudioContext | null {
 
 function playBallClack(relativeSpeed: number) {
   const now = performance.now();
-  if (now - lastClackSoundTime < 40) return;
+  if (now - lastClackSoundTime < 35) return;
   lastClackSoundTime = now;
 
   const ctx = getAudioContext();
@@ -275,20 +275,24 @@ function CueMasterApp() {
   const activeCue = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
   const currentTable = ALL_TABLES.find((t) => t.id === selectedTable) || ALL_TABLES[0];
 
+  // Turn Timer with Circular Progress (Enhanced by Cue Time Stat)
+  const turnTotalTime = activeCue?.stats?.time || 30;
+  const [turnTimeLeft, setTurnTimeLeft] = useState(turnTotalTime);
+
   // Table Dimensions
   const TABLE_WIDTH = 900;
   const TABLE_HEIGHT = 450;
   const CUSHION = 30;
   const BALL_RADIUS = 12;
 
-  // 6 Official Table Pockets
+  // 6 Official Table Pockets with Realistic Drop Throat Coordinates
   const pockets: Pocket[] = [
-    { id: 0, name: "أعلى يسار", x: CUSHION + 10, y: CUSHION + 10 },
-    { id: 1, name: "أعلى وسط", x: TABLE_WIDTH / 2, y: CUSHION + 5 },
-    { id: 2, name: "أعلى يمين", x: TABLE_WIDTH - CUSHION - 10, y: CUSHION + 10 },
-    { id: 3, name: "أسفل يسار", x: CUSHION + 10, y: TABLE_HEIGHT - CUSHION - 10 },
-    { id: 4, name: "أسفل وسط", x: TABLE_WIDTH / 2, y: TABLE_HEIGHT - CUSHION - 5 },
-    { id: 5, name: "أسفل يمين", x: TABLE_WIDTH - CUSHION - 10, y: TABLE_HEIGHT - CUSHION - 10 },
+    { id: 0, name: "أعلى يسار", x: CUSHION + 4, y: CUSHION + 4 },
+    { id: 1, name: "أعلى وسط", x: TABLE_WIDTH / 2, y: CUSHION - 4 },
+    { id: 2, name: "أعلى يمين", x: TABLE_WIDTH - CUSHION - 4, y: CUSHION + 4 },
+    { id: 3, name: "أسفل يسار", x: CUSHION + 4, y: TABLE_HEIGHT - CUSHION - 4 },
+    { id: 4, name: "أسفل وسط", x: TABLE_WIDTH / 2, y: TABLE_HEIGHT - CUSHION + 4 },
+    { id: 5, name: "أسفل يمين", x: TABLE_WIDTH - CUSHION - 4, y: TABLE_HEIGHT - CUSHION - 4 },
   ];
 
   // Preload Storage & Assets
@@ -330,6 +334,54 @@ function CueMasterApp() {
     setGems(val);
     try { localStorage.setItem("cuemaster_gems", val.toString()); } catch {}
   };
+
+  // Turn Timeout Foul Handler
+  const handleTurnTimeout = () => {
+    if (soundEnabled) playFoulBuzzer();
+    if (!isPractice) {
+      const nextTurn = turn === "human" ? "bot" : "human";
+      setTurn(nextTurn);
+      if (nextTurn === "human") {
+        setIsBallInHand(true);
+        setTurnMessage("⏱️ انتهى وقت الخصم! الفاول لصالحك، الكرة في يدك الآن 🧤");
+      } else {
+        setTurnMessage("⚠️ انتهى وقت التصويب! فاول لانتهاء الوقت، الكرة في يد الخصم الآن.");
+        setTimeout(() => {
+          const cb = ballsRef.current[0];
+          if (cb) {
+            cb.x = CUSHION + 180 + Math.random() * 80;
+            cb.y = TABLE_HEIGHT / 2 + (Math.random() - 0.5) * 80;
+            cb.vx = 0;
+            cb.vy = 0;
+            cb.isPotted = false;
+          }
+        }, 1000);
+      }
+    } else {
+      setIsBallInHand(true);
+      setTurnMessage("⏱️ انتهى وقت التصويب في التدريب!");
+    }
+  };
+
+  // Turn Timer Countdown Loop
+  useEffect(() => {
+    if (currentView !== "table" || isShooting || gameOver || isPractice) return;
+
+    setTurnTimeLeft(turnTotalTime);
+
+    const timer = setInterval(() => {
+      setTurnTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleTurnTimeout();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [currentView, turn, isShooting, gameOver, isPractice, turnTotalTime]);
 
   // Initialize Rack with Official Standard 8-Ball Positions
   const initBalls = (currentMode: "8-ball" | "snooker") => {
@@ -548,7 +600,7 @@ function CueMasterApp() {
     if (soundEnabled) playSuccessChime();
   };
 
-  // Physics Engine & Renderer Loop
+  // High-Precision Physics Engine (8 Sub-steps per frame, Segmented Cushions, Realistic Pocket Mouth)
   useEffect(() => {
     if (currentView !== "table") return;
 
@@ -558,153 +610,194 @@ function CueMasterApp() {
     if (!ctx) return;
 
     const tableCfg = ALL_TABLES.find((t) => t.id === selectedTable) || ALL_TABLES[0];
+    const SUB_STEPS = 8;
     const FRICTION = tableCfg.friction;
+    const subFriction = Math.pow(FRICTION, 1 / SUB_STEPS);
     const CUSHION_BOUNCE = tableCfg.bounceRestitution;
-    const POCKET_RADIUS = 24;
     const MAX_SPEED = 28;
 
     const updatePhysics = () => {
       const balls = ballsRef.current;
       let anyMoving = false;
 
-      // 1. Position & Cushion Updates
-      balls.forEach((ball) => {
-        if (ball.isPotted) return;
+      const cueActive = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
+      const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
 
-        // Apply Velocity & Friction
-        ball.x += ball.vx;
-        ball.y += ball.vy;
-        ball.vx *= FRICTION;
-        ball.vy *= FRICTION;
+      for (let step = 0; step < SUB_STEPS; step++) {
+        // 1. Move Balls & Resolve Cushions / Pocket Drops per Sub-step
+        balls.forEach((ball) => {
+          if (ball.isPotted) return;
 
-        // Cap maximum speed
-        const curSpeed = Math.hypot(ball.vx, ball.vy);
-        if (curSpeed > MAX_SPEED) {
-          ball.vx = (ball.vx / curSpeed) * MAX_SPEED;
-          ball.vy = (ball.vy / curSpeed) * MAX_SPEED;
-        }
+          ball.x += ball.vx / SUB_STEPS;
+          ball.y += ball.vy / SUB_STEPS;
+          ball.vx *= subFriction;
+          ball.vy *= subFriction;
 
-        // Clean stop threshold to prevent endless slow rolling
-        if (curSpeed < 0.08) {
-          ball.vx = 0;
-          ball.vy = 0;
-        } else {
-          anyMoving = true;
-        }
+          const speed = Math.hypot(ball.vx, ball.vy);
+          if (speed > 0.08) anyMoving = true;
 
-        // Cushion Bounces with custom table restitution
-        const minX = CUSHION + ball.radius;
-        const maxX = TABLE_WIDTH - CUSHION - ball.radius;
-        const minY = CUSHION + ball.radius;
-        const maxY = TABLE_HEIGHT - CUSHION - ball.radius;
+          // Realistic Cushion Segments (Bouncing happens strictly on cushion rails between pockets)
+          const r = ball.radius;
+          const leftBound = CUSHION + r;
+          const rightBound = TABLE_WIDTH - CUSHION - r;
+          const topBound = CUSHION + r;
+          const bottomBound = TABLE_HEIGHT - CUSHION - r;
 
-        const speed = Math.hypot(ball.vx, ball.vy);
-        if (ball.x < minX) { ball.x = minX; ball.vx = -ball.vx * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
-        if (ball.x > maxX) { ball.x = maxX; ball.vx = -ball.vx * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
-        if (ball.y < minY) { ball.y = minY; ball.vy = -ball.vy * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
-        if (ball.y > maxY) { ball.y = maxY; ball.vy = -ball.vy * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
+          // Top Cushions (two segments: left of center pocket, right of center pocket)
+          if (ball.y < topBound && ((ball.x > 56 && ball.x < 424) || (ball.x > 476 && ball.x < 844))) {
+            ball.y = topBound;
+            ball.vy = -ball.vy * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          }
+          // Bottom Cushions
+          if (ball.y > bottomBound && ((ball.x > 56 && ball.x < 424) || (ball.x > 476 && ball.x < 844))) {
+            ball.y = bottomBound;
+            ball.vy = -ball.vy * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          }
+          // Left Cushion
+          if (ball.x < leftBound && (ball.y > 56 && ball.y < 394)) {
+            ball.x = leftBound;
+            ball.vx = -ball.vx * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          }
+          // Right Cushion
+          if (ball.x > rightBound && (ball.y > 56 && ball.y < 394)) {
+            ball.x = rightBound;
+            ball.vx = -ball.vx * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          }
 
-        // Pocket Detection
-        pockets.forEach((p) => {
-          const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
-          if (dist < POCKET_RADIUS) {
+          // Outer table safety catch (behind pocket pockets)
+          if (ball.x < 12 || ball.x > TABLE_WIDTH - 12 || ball.y < 12 || ball.y > TABLE_HEIGHT - 12) {
+            const nearestP = pockets.reduce((prev, curr) => Math.hypot(curr.x - ball.x, curr.y - ball.y) < Math.hypot(prev.x - ball.x, prev.y - ball.y) ? curr : prev);
             ball.isPotted = true;
             ball.vx = 0;
             ball.vy = 0;
             if (soundEnabled) playPocketDrop();
-
-            if (ball.type === "cue") {
-              cueScratchedInShotRef.current = true;
-            } else {
-              pottedInCurrentShotRef.current.push({ ball, pocketId: p.id });
-            }
+            if (ball.type === "cue") cueScratchedInShotRef.current = true;
+            else pottedInCurrentShotRef.current.push({ ball, pocketId: nearestP.id });
+            return;
           }
-        });
-      });
 
-      // 2. Ball-to-Ball Elastic Collisions (Rigid Body with Proper Momentum Conservation)
-      const cueActive = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
-      const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
+          // Exact Pocket Drop Detection (Mouth ~1.5 balls wide)
+          pockets.forEach((p) => {
+            const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
+            const isSide = (p.id === 1 || p.id === 4);
+            const dropLimit = isSide ? 16 : 18;
 
-      for (let i = 0; i < balls.length; i++) {
-        for (let j = i + 1; j < balls.length; j++) {
-          const b1 = balls[i];
-          const b2 = balls[j];
-          if (b1.isPotted || b2.isPotted) continue;
+            if (dist < dropLimit) {
+              if (isSide) {
+                const inMouthX = ball.x > 428 && ball.x < 472;
+                if (!inMouthX) return;
+              }
+              ball.isPotted = true;
+              ball.vx = 0;
+              ball.vy = 0;
+              if (soundEnabled) playPocketDrop();
 
-          const dx = b2.x - b1.x;
-          const dy = b2.y - b1.y;
-          const dist = Math.hypot(dx, dy);
-          const minDist = b1.radius + b2.radius;
-
-          if (dist < minDist && dist > 0) {
-            const nx = dx / dist;
-            const ny = dy / dist;
-
-            // Positional separation to prevent balls sticking
-            const overlap = minDist - dist;
-            b1.x -= nx * overlap * 0.5;
-            b1.y -= ny * overlap * 0.5;
-            b2.x += nx * overlap * 0.5;
-            b2.y += ny * overlap * 0.5;
-
-            // Relative velocity along collision normal (b1 relative to b2)
-            const relVelNormal = (b1.vx - b2.vx) * nx + (b1.vy - b2.vy) * ny;
-
-            // ONLY apply impulse if balls are approaching
-            if (relVelNormal > 0) {
-              const restitution = 0.94;
-              const impulse = ((1 + restitution) * relVelNormal) / 2;
-
-              b1.vx -= impulse * nx;
-              b1.vy -= impulse * ny;
-              b2.vx += impulse * nx;
-              b2.vy += impulse * ny;
-
-              anyMoving = true;
-
-              if (soundEnabled && relVelNormal > 0.8) {
-                playBallClack(relVelNormal);
+              if (ball.type === "cue") {
+                cueScratchedInShotRef.current = true;
+              } else {
+                pottedInCurrentShotRef.current.push({ ball, pocketId: p.id });
               }
             }
+          });
+        });
 
-            // Track First Ball Hit by Cue Ball
-            if (b1.type === "cue" || b2.type === "cue") {
-              const targetB = b1.type === "cue" ? b2 : b1;
-              const cueB = b1.type === "cue" ? b1 : b2;
+        // 2. Ball-to-Ball Elastic Collisions (High-precision sub-stepping eliminates penetration & sideways deflection)
+        for (let i = 0; i < balls.length; i++) {
+          for (let j = i + 1; j < balls.length; j++) {
+            const b1 = balls[i];
+            const b2 = balls[j];
+            if (b1.isPotted || b2.isPotted) continue;
 
-              if (!firstBallHitInShotRef.current) {
-                firstBallHitInShotRef.current = targetB;
+            const dx = b2.x - b1.x;
+            const dy = b2.y - b1.y;
+            const dist = Math.hypot(dx, dy);
+            const minDist = b1.radius + b2.radius;
+
+            if (dist < minDist && dist > 0.001) {
+              const nx = dx / dist;
+              const ny = dy / dist;
+
+              // Infinitesimal separation (prevents any violent sideways displacement)
+              const overlap = minDist - dist;
+              b1.x -= nx * overlap * 0.5;
+              b1.y -= ny * overlap * 0.5;
+              b2.x += nx * overlap * 0.5;
+              b2.y += ny * overlap * 0.5;
+
+              // Relative velocity along collision normal
+              const relVelNormal = (b1.vx - b2.vx) * nx + (b1.vy - b2.vy) * ny;
+
+              if (relVelNormal > 0) {
+                const restitution = 0.94;
+                const impulse = ((1 + restitution) * relVelNormal) / 2;
+
+                b1.vx -= impulse * nx;
+                b1.vy -= impulse * ny;
+                b2.vx += impulse * nx;
+                b2.vy += impulse * ny;
+
+                anyMoving = true;
+
+                if (soundEnabled && relVelNormal > 0.8) {
+                  playBallClack(relVelNormal);
+                }
               }
 
-              // Apply Spin Impulse ONCE per shot with cue spin multiplier
-              if (!spinAppliedInCurrentShotRef.current) {
-                spinAppliedInCurrentShotRef.current = true;
-                const cosAim = Math.cos(activeShotAimAngleRef.current);
-                const sinAim = Math.sin(activeShotAimAngleRef.current);
+              // Track First Ball Hit by Cue Ball
+              if (b1.type === "cue" || b2.type === "cue") {
+                const targetB = b1.type === "cue" ? b2 : b1;
+                const cueB = b1.type === "cue" ? b1 : b2;
 
-                if (spinY < -0.15) {
-                  // Backspin / Screw (اسكروه)
-                  const screwMag = Math.abs(spinY) * 5.2 * cueSpinBonus;
-                  cueB.vx -= cosAim * screwMag;
-                  cueB.vy -= sinAim * screwMag;
-                } else if (spinY > 0.15) {
-                  // Topspin / Follow (توب سبن)
-                  const followMag = spinY * 4.0 * cueSpinBonus;
-                  cueB.vx += cosAim * followMag;
-                  cueB.vy += sinAim * followMag;
+                if (!firstBallHitInShotRef.current) {
+                  firstBallHitInShotRef.current = targetB;
                 }
-                if (Math.abs(spinX) > 0.15) {
-                  // Side English
-                  const sideMag = spinX * 2.8 * cueSpinBonus;
-                  cueB.vx += -sinAim * sideMag;
-                  cueB.vy += cosAim * sideMag;
+
+                // Apply Spin Impulse ONCE per shot along aim axis
+                if (!spinAppliedInCurrentShotRef.current) {
+                  spinAppliedInCurrentShotRef.current = true;
+                  const cosAim = Math.cos(activeShotAimAngleRef.current);
+                  const sinAim = Math.sin(activeShotAimAngleRef.current);
+
+                  if (spinY < -0.15) {
+                    const screwMag = Math.abs(spinY) * 4.8 * cueSpinBonus;
+                    cueB.vx -= cosAim * screwMag;
+                    cueB.vy -= sinAim * screwMag;
+                  } else if (spinY > 0.15) {
+                    const followMag = spinY * 3.6 * cueSpinBonus;
+                    cueB.vx += cosAim * followMag;
+                    cueB.vy += sinAim * followMag;
+                  }
+                  if (Math.abs(spinX) > 0.15) {
+                    const sideMag = spinX * 2.2 * cueSpinBonus;
+                    cueB.vx += -sinAim * sideMag;
+                    cueB.vy += cosAim * sideMag;
+                  }
                 }
               }
             }
           }
         }
       }
+
+      // Clean Stop Threshold & Speed Clamping
+      balls.forEach((ball) => {
+        if (ball.isPotted) return;
+        const curSpeed = Math.hypot(ball.vx, ball.vy);
+        if (curSpeed > MAX_SPEED) {
+          ball.vx = (ball.vx / curSpeed) * MAX_SPEED;
+          ball.vy = (ball.vy / curSpeed) * MAX_SPEED;
+        }
+        if (curSpeed < 0.08) {
+          ball.vx = 0;
+          ball.vy = 0;
+        } else {
+          anyMoving = true;
+        }
+      });
 
       // 3. Handle Shot Completion & Official 8-Ball Rules Judgment
       if (isShooting && !anyMoving) {
@@ -828,6 +921,7 @@ function CueMasterApp() {
           }
 
           // ASSIGN GROUPS: First legal pot determines Solids (سادة) vs Stripes (ألوان)
+          // Displays floating message for exactly 1.2 seconds!
           if (humanGroup === "unassigned" && legallyCalledPots.length > 0) {
             const firstLegal = legallyCalledPots.find((b) => b.type === "solid" || b.type === "stripe");
             if (firstLegal) {
@@ -836,22 +930,23 @@ function CueMasterApp() {
                 setHumanGroup(isSolid ? "solids" : "stripes");
                 setBotGroup(isSolid ? "stripes" : "solids");
                 setGroupAnnouncement({
-                  title: "🎉 أحرزت أول كرة بنجاح وتم تحديد الأصناف!",
-                  human: isSolid ? "سادة (Solids 1-7) 🟡🔴" : "ألوان (Stripes 9-15) 🔵⚪",
-                  bot: isSolid ? "ألوان (Stripes 9-15) 🔵⚪" : "سادة (Solids 1-7) 🟡🔴",
+                  title: "🎉 أحرزت أول كرة وتم تعيين الصنف!",
+                  human: isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)",
+                  bot: isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)",
                 });
-                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)"}]!`);
+                setTurnMessage(`🎱 صنفك المعتمد: [${isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)"}]!`);
               } else {
                 setBotGroup(isSolid ? "solids" : "stripes");
                 setHumanGroup(isSolid ? "stripes" : "solids");
                 setGroupAnnouncement({
-                  title: "🤖 الخصم أحرز أول كرة وتم تحديد الأصناف!",
-                  human: isSolid ? "ألوان (Stripes 9-15) 🔵⚪" : "سادة (Solids 1-7) 🟡🔴",
-                  bot: isSolid ? "سادة (Solids 1-7) 🟡🔴" : "ألوان (Stripes 9-15) 🔵⚪",
+                  title: "🤖 الخصم أحرز أول كرة وتم تعيين الأصناف!",
+                  human: isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)",
+                  bot: isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)",
                 });
-                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)"}]!`);
+                setTurnMessage(`🎱 صنفك المعتمد: [${isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)"}]!`);
               }
-              setTimeout(() => setGroupAnnouncement(null), 4500);
+              // Quick 1.2 second announcement disappearance
+              setTimeout(() => setGroupAnnouncement(null), 1200);
             }
           }
 
@@ -961,7 +1056,7 @@ function CueMasterApp() {
 
         ctx.fillStyle = "rgba(2, 6, 12, 0.85)";
         ctx.beginPath();
-        ctx.arc(p.x, p.y, POCKET_RADIUS, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 20, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = isTarget ? "#eab308" : tableCfg.cushionGlow;
@@ -972,14 +1067,14 @@ function CueMasterApp() {
           ctx.strokeStyle = "rgba(234, 179, 8, 0.9)";
           ctx.setLineDash([4, 4]);
           ctx.beginPath();
-          ctx.arc(p.x, p.y, POCKET_RADIUS + 8, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, 28, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
 
           ctx.fillStyle = "#eab308";
           ctx.font = "bold 10px sans-serif";
           ctx.textAlign = "center";
-          ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 36 : -30));
+          ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 38 : -30));
         }
       });
 
@@ -1480,7 +1575,7 @@ function CueMasterApp() {
           {/* Top Bar: Profile & Currencies */}
           <header className="relative z-10 flex items-center justify-between px-6 py-4">
             <div className="flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-amber-500/30">
-              <img src={avatar} alt="Avatar" className="w-10 h-10 rounded-xl bg-amber-400/20 p-1 border border-amber-400" />
+              <img src={avatar} alt="Avatar" className="w-10 h-10 rounded-xl bg-amber-400/20 p-1 border border-amber-400 object-cover" />
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-black text-amber-300 text-sm">{username}</span>
@@ -1591,7 +1686,7 @@ function CueMasterApp() {
               className="group relative flex items-center gap-3 bg-gradient-to-b from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 px-6 py-3 rounded-2xl border-2 border-amber-200 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.6)] active:scale-95 transition-all cursor-pointer"
             >
               <span className="text-xl">🛒</span>
-              <span className="text-sm tracking-wider uppercase">المتجر (SHOP)</span>
+              <span className="text-sm tracking-wider uppercase">المتجر ({ALL_CUES.length} عصا & {ALL_TABLES.length} طاولات)</span>
             </button>
 
             <button
@@ -1608,20 +1703,58 @@ function CueMasterApp() {
         /* VIEW 2: ACTIVE MATCH TABLE SCREEN                         */
         /* ========================================================= */
         <div className="flex-1 flex flex-col justify-between p-2 md:p-4 bg-[#020b14] max-w-6xl mx-auto w-full">
-          {/* Top In-Game HUD Bar */}
+          {/* Top In-Game HUD Bar with Circular Turn Timers */}
           <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-2xl p-3 shadow-xl backdrop-blur-md">
-            {/* Player Info & Remaining Group Balls */}
+            {/* Player Info & Circular Timer */}
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <img src={avatar} alt="You" className="w-11 h-11 rounded-xl bg-slate-800 border-2 border-amber-400 shadow-md" />
-                {turn === "human" && (
-                  <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse" />
-                )}
+              <div className="relative flex items-center justify-center">
+                {/* Circular Turn Timer SVG Ring */}
+                <svg className="w-14 h-14 -rotate-90 pointer-events-none">
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="23"
+                    stroke="rgba(255,255,255,0.12)"
+                    strokeWidth="3.5"
+                    fill="transparent"
+                  />
+                  {turn === "human" && (
+                    <circle
+                      cx="28"
+                      cy="28"
+                      r="23"
+                      stroke={turnTimeLeft <= 5 ? "#ef4444" : turnTimeLeft <= 10 ? "#facc15" : "#22c55e"}
+                      strokeWidth="3.5"
+                      fill="transparent"
+                      strokeDasharray={2 * Math.PI * 23}
+                      strokeDashoffset={2 * Math.PI * 23 * (1 - turnTimeLeft / turnTotalTime)}
+                      strokeLinecap="round"
+                      className="transition-all duration-300"
+                    />
+                  )}
+                </svg>
+                <img
+                  src={avatar}
+                  alt="You"
+                  className="absolute w-10 h-10 rounded-xl bg-slate-800 border border-amber-400 shadow-md object-cover"
+                />
               </div>
+
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-black text-amber-300">{username}</span>
                   <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">أنت</span>
+                  {turn === "human" && (
+                    <span
+                      className={`text-[10px] font-black px-1.5 py-0.5 rounded-full font-mono ${
+                        turnTimeLeft <= 5
+                          ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse"
+                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      }`}
+                    >
+                      ⏱️ {turnTimeLeft}s
+                    </span>
+                  )}
                 </div>
                 {/* Balls Assigned & Remaining Status */}
                 <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mt-0.5">
@@ -1630,9 +1763,9 @@ function CueMasterApp() {
                       <span className="text-amber-400 font-bold">طاولة مفتوحة</span>
                     ) : (
                       <span className="flex items-center gap-1">
-                        <span className="text-amber-300">{humanGroup === "solids" ? "سادة 🟡" : "ألوان 🔵"}</span>
+                        <span className="text-amber-300 font-black">{humanGroup === "solids" ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)"}</span>
                         <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-300">متبقي: {humanRemainingBalls.length}</span>
-                        {humanRemainingBalls.length === 0 && <span className="text-xs text-amber-400 font-black animate-pulse">🎯 العب 8!</span>}
+                        {humanRemainingBalls.length === 0 && <span className="text-xs text-amber-400 font-black animate-pulse">🎯 هدفك الكرة 8!</span>}
                       </span>
                     )
                   ) : (
@@ -1653,22 +1786,65 @@ function CueMasterApp() {
               <div className="text-[11px] font-black text-amber-200 mt-1 line-clamp-1">{turnMessage}</div>
             </div>
 
-            {/* Opponent Info */}
+            {/* Opponent Info with Circular Timer */}
             <div className="flex items-center gap-3">
               <div className="text-left">
                 <div className="flex items-center gap-1.5 justify-end">
+                  {turn === "bot" && (
+                    <span
+                      className={`text-[10px] font-black px-1.5 py-0.5 rounded-full font-mono ${
+                        turnTimeLeft <= 5
+                          ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse"
+                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      }`}
+                    >
+                      ⏱️ {turnTimeLeft}s
+                    </span>
+                  )}
                   <span className="text-xs font-black text-slate-200">{opponentName}</span>
                   <span>{opponentFlag}</span>
                 </div>
                 <div className="text-[11px] font-bold text-slate-400">
-                  {isPractice ? "وضع التدريب" : botGroup === "unassigned" ? "طاولة مفتوحة" : botGroup === "solids" ? "سادة 🟡" : "ألوان 🔵"}
+                  {isPractice
+                    ? "وضع التدريب"
+                    : botGroup === "unassigned"
+                    ? "طاولة مفتوحة"
+                    : botGroup === "solids"
+                    ? "سادة 🟡 (1-7)"
+                    : "ألوان 🔵 (9-15)"}
                 </div>
               </div>
-              <div className="relative">
-                <img src={opponentAvatar} alt="Opponent" className="w-11 h-11 rounded-xl bg-slate-800 border-2 border-slate-700 shadow-md" />
-                {turn === "bot" && (
-                  <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse" />
-                )}
+
+              <div className="relative flex items-center justify-center">
+                <svg className="w-14 h-14 -rotate-90 pointer-events-none">
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="23"
+                    stroke="rgba(255,255,255,0.12)"
+                    strokeWidth="3.5"
+                    fill="transparent"
+                  />
+                  {turn === "bot" && (
+                    <circle
+                      cx="28"
+                      cy="28"
+                      r="23"
+                      stroke={turnTimeLeft <= 5 ? "#ef4444" : turnTimeLeft <= 10 ? "#facc15" : "#22c55e"}
+                      strokeWidth="3.5"
+                      fill="transparent"
+                      strokeDasharray={2 * Math.PI * 23}
+                      strokeDashoffset={2 * Math.PI * 23 * (1 - turnTimeLeft / turnTotalTime)}
+                      strokeLinecap="round"
+                      className="transition-all duration-300"
+                    />
+                  )}
+                </svg>
+                <img
+                  src={opponentAvatar}
+                  alt="Opponent"
+                  className="absolute w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 shadow-md object-cover"
+                />
               </div>
 
               {/* Shop & Exit Buttons */}
@@ -1689,12 +1865,12 @@ function CueMasterApp() {
             </div>
           </div>
 
-          {/* Group Assignment Banner Overlay */}
+          {/* Group Assignment Floating Toast (Shows for exactly 1.2s and fades away) */}
           {groupAnnouncement && (
-            <div className="bg-gradient-to-r from-amber-500/20 via-amber-500/30 to-amber-500/20 border border-amber-500/50 rounded-2xl p-2.5 my-2 text-center animate-bounce">
+            <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border-2 border-amber-400 text-slate-100 px-6 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col items-center animate-in fade-in zoom-in duration-150">
               <div className="text-xs font-black text-amber-300">{groupAnnouncement.title}</div>
               <div className="text-[11px] font-bold text-slate-200 mt-0.5">
-                أنت: <span className="text-amber-400">{groupAnnouncement.human}</span> | الخصم: <span className="text-slate-300">{groupAnnouncement.bot}</span>
+                أنت: <span className="text-amber-400 font-extrabold">{groupAnnouncement.human}</span> | الخصم: <span className="text-slate-300 font-extrabold">{groupAnnouncement.bot}</span>
               </div>
             </div>
           )}
@@ -1806,7 +1982,7 @@ function CueMasterApp() {
       )}
 
       {/* ========================================================= */}
-      {/* SHOP & INVENTORY MODAL (20 CUES + 4 TABLES WITH STATS)   */}
+      {/* SHOP & INVENTORY MODAL (20 CUES + 9 TABLES WITH STATS)   */}
       {/* ========================================================= */}
       {activeModal === "shop" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 md:p-6 overflow-hidden">
@@ -2008,7 +2184,7 @@ function CueMasterApp() {
                   </div>
                 </>
               ) : (
-                /* TABLES TAB */
+                /* TABLES TAB (ALL 9 TABLES) */
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {ALL_TABLES.map((table) => {
@@ -2024,16 +2200,19 @@ function CueMasterApp() {
                               : "bg-slate-950/70 border-slate-800 hover:border-slate-700"
                           }`}
                         >
-                          {/* Table Image or Felt Preview */}
+                          {/* Table Image Preview */}
                           <div className="w-full h-32 rounded-xl overflow-hidden border border-slate-800 relative bg-slate-900 mb-3">
                             {table.image ? (
                               <img src={table.image} alt={table.nameAr} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center bg-[#15803d]">
-                                <span className="text-white font-black text-sm drop-shadow">قماش صوف ميرينو الأخضر</span>
+                                <span className="text-white font-black text-sm drop-shadow">طاولة البطولة الخضراء</span>
                               </div>
                             )}
-                            <div className="absolute bottom-2 right-2 bg-black/75 px-2 py-0.5 rounded text-[10px] text-amber-300 font-bold">
+                            <div
+                              className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[10px] font-black border"
+                              style={{ backgroundColor: "rgba(0,0,0,0.75)", color: table.cushionGlow, borderColor: table.cushionGlow }}
+                            >
                               {table.cushionGlow}
                             </div>
                           </div>
@@ -2069,13 +2248,6 @@ function CueMasterApp() {
                         </div>
                       );
                     })}
-                  </div>
-
-                  {/* Teaser Banner for Future Tables */}
-                  <div className="bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
-                    <span className="text-lg">⏳</span>
-                    <h5 className="text-xs font-black text-amber-300 mt-1">المزيد من الطاولات والساحات قادمة في التحديثات القادمة!</h5>
-                    <p className="text-[10px] text-slate-400">طاولات النيون الفضائية، طاولات الصالونات العتيقة، وطاولات التحديات الاحترافية.</p>
                   </div>
                 </div>
               )}
