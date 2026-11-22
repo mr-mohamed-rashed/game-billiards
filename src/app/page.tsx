@@ -50,10 +50,9 @@ function getAudioContext(): AudioContext | null {
   return sharedAudioCtx;
 }
 
-// Authentic Phenolic Ball Impact Sound (Crisp Transient Click + Body Resonance)
 function playBallClack(relativeSpeed: number) {
   const now = performance.now();
-  if (now - lastClackSoundTime < 45) return; // Prevent audio flood on triangle break!
+  if (now - lastClackSoundTime < 45) return;
   lastClackSoundTime = now;
 
   const ctx = getAudioContext();
@@ -61,7 +60,7 @@ function playBallClack(relativeSpeed: number) {
   const t = ctx.currentTime;
   const vol = Math.min(1, Math.max(0.12, relativeSpeed / 12));
 
-  // 1. Sharp High-Frequency Click (Aramith resin surface contact)
+  // High-Frequency Aramith click
   const osc1 = ctx.createOscillator();
   const gain1 = ctx.createGain();
   osc1.type = 'sine';
@@ -74,7 +73,7 @@ function playBallClack(relativeSpeed: number) {
   osc1.start(t);
   osc1.stop(t + 0.022);
 
-  // 2. Solid Body Acoustic Resonance (~980Hz)
+  // Acoustic body resonance
   const osc2 = ctx.createOscillator();
   const gain2 = ctx.createGain();
   osc2.type = 'triangle';
@@ -88,7 +87,6 @@ function playBallClack(relativeSpeed: number) {
   osc2.stop(t + 0.04);
 }
 
-// Authentic Leather Cue Tip Strike
 function playCueStrike(powerPercent: number) {
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -108,7 +106,6 @@ function playCueStrike(powerPercent: number) {
   osc.stop(t + 0.11);
 }
 
-// Deep Muffled Leather Pocket Drop
 function playPocketDrop() {
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -127,7 +124,6 @@ function playPocketDrop() {
   osc.stop(t + 0.22);
 }
 
-// Foul Chime / Warning
 function playFoulBuzzer() {
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -156,13 +152,13 @@ const BALL_CONFIG_MAP: Record<number, { color: string; type: 'solid' | 'stripe' 
   6: { color: '#16a34a', type: 'solid', nameAr: 'خضراء سادة (6)' },
   7: { color: '#831843', type: 'solid', nameAr: 'عنابية سادة (7)' },
   8: { color: '#09090b', type: 'black', nameAr: 'السوداء (8)' },
-  9: { color: '#facc15', type: 'stripe', nameAr: 'صفراء مخططة (9)' },
-  10: { color: '#2563eb', type: 'stripe', nameAr: 'زرقاء مخططة (10)' },
-  11: { color: '#dc2626', type: 'stripe', nameAr: 'حمراء مخططة (11)' },
-  12: { color: '#9333ea', type: 'stripe', nameAr: 'بنفسجية مخططة (12)' },
-  13: { color: '#ea580c', type: 'stripe', nameAr: 'برتقالية مخططة (13)' },
-  14: { color: '#16a34a', type: 'stripe', nameAr: 'خضراء مخططة (14)' },
-  15: { color: '#831843', type: 'stripe', nameAr: 'عنابية مخططة (15)' },
+  9: { color: '#facc15', type: 'stripe', nameAr: 'صفراء ألوان (9)' },
+  10: { color: '#2563eb', type: 'stripe', nameAr: 'زرقاء ألوان (10)' },
+  11: { color: '#dc2626', type: 'stripe', nameAr: 'حمراء ألوان (11)' },
+  12: { color: '#9333ea', type: 'stripe', nameAr: 'بنفسجية ألوان (12)' },
+  13: { color: '#ea580c', type: 'stripe', nameAr: 'برتقالية ألوان (13)' },
+  14: { color: '#16a34a', type: 'stripe', nameAr: 'خضراء ألوان (14)' },
+  15: { color: '#831843', type: 'stripe', nameAr: 'عنابية ألوان (15)' },
 };
 
 function CueMasterApp() {
@@ -195,16 +191,18 @@ function CueMasterApp() {
   const [coins, setCoins] = useState(10500);
   const [gems, setGems] = useState(150);
 
-  // Official 8-Ball Game State
+  // Official 8-Ball Game State: Groups Assignment (سادة 1-7 أم ألوان 9-15)
   const [humanGroup, setHumanGroup] = useState<'unassigned' | 'solids' | 'stripes'>('unassigned');
   const [botGroup, setBotGroup] = useState<'unassigned' | 'solids' | 'stripes'>('unassigned');
-  const [calledPocketId, setCalledPocketId] = useState<number | null>(0); // Default to Top-Left or user choice
+  const [groupAnnouncement, setGroupAnnouncement] = useState<{ title: string; human: string; bot: string } | null>(null);
+
+  const [calledPocketId, setCalledPocketId] = useState<number | null>(0);
   const [isBallInHand, setIsBallInHand] = useState(false);
   const [ballInHandHoverPos, setBallInHandHoverPos] = useState<{ x: number; y: number } | null>(null);
 
   // Cue Stick Spin / English Control (اسكروه، باك سبن، توب سبن)
-  const [spinX, setSpinX] = useState(0); // -1 (Left) to +1 (Right)
-  const [spinY, setSpinY] = useState(0); // -1 (Backspin / Screw) to +1 (Topspin / Follow)
+  const [spinX, setSpinX] = useState(0);
+  const [spinY, setSpinY] = useState(0);
 
   // Cue Stick Drag Pull-Back State
   const [isDraggingCueStick, setIsDraggingCueStick] = useState(false);
@@ -212,10 +210,10 @@ function CueMasterApp() {
 
   // Table Engine State
   const [turn, setTurn] = useState<'human' | 'bot'>('human');
-  const [turnMessage, setTurnMessage] = useState('اختر الجيب المستهدف، اسحب المضرب واضرب!');
+  const [turnMessage, setTurnMessage] = useState('طاولة مفتوحة: أول كرة تسقطها تحدد صنفك (سادة أم ألوان)!');
   const [humanScore, setHumanScore] = useState(0);
   const [botScore, setBotScore] = useState(0);
-  const [power, setPower] = useState(65); // 10 to 100
+  const [power, setPower] = useState(65);
   const [aimAngle, setAimAngle] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
   const [gameOver, setGameOver] = useState<string | null>(null);
@@ -245,7 +243,7 @@ function CueMasterApp() {
     { id: 5, name: 'أسفل يمين', x: TABLE_WIDTH - CUSHION - 10, y: TABLE_HEIGHT - CUSHION - 10 }
   ];
 
-  // Initialize Rack with Official Standard 8-Ball Positions (No Duplicates, Ball 5 Present!)
+  // Initialize Rack with Official Standard 8-Ball Positions
   const initBalls = (currentMode: '8-ball' | 'snooker') => {
     const balls: Ball[] = [];
     const tableLeft = CUSHION;
@@ -269,12 +267,6 @@ function CueMasterApp() {
     if (currentMode === '8-ball') {
       const startX = tableLeft + (tableRight - tableLeft) * 0.7;
 
-      // Exact Standard 15-ball rack layout:
-      // Row 0: 1
-      // Row 1: 9, 2
-      // Row 2: 3, 8 (Center!), 10
-      // Row 3: 11, 4, 12, 5 (Here is 5!)
-      // Row 4: 13, 6, 14, 7, 15
       const RACK_NUMBERS = [
         1,
         9, 2,
@@ -309,7 +301,7 @@ function CueMasterApp() {
         }
       }
     } else {
-      // Snooker Setup: 15 Reds Triangle + 6 Colors
+      // Snooker Setup
       const startX = tableLeft + (tableRight - tableLeft) * 0.72;
       let redId = 1;
       for (let r = 0; r < 5; r++) {
@@ -360,6 +352,7 @@ function CueMasterApp() {
     ballsRef.current = balls;
     setHumanGroup('unassigned');
     setBotGroup('unassigned');
+    setGroupAnnouncement(null);
     setIsBallInHand(false);
     setCalledPocketId(0);
     firstBallHitInShotRef.current = null;
@@ -394,7 +387,7 @@ function CueMasterApp() {
     }
   };
 
-  // Ball in Hand helper: check valid placement
+  // Ball in Hand placement validation
   const isValidPlacement = (x: number, y: number) => {
     const minX = CUSHION + BALL_RADIUS + 5;
     const maxX = TABLE_WIDTH - CUSHION - BALL_RADIUS - 5;
@@ -409,7 +402,6 @@ function CueMasterApp() {
     return true;
   };
 
-  // Place cue ball in Ball-in-Hand mode
   const handlePlaceCueBall = (x: number, y: number) => {
     if (!isValidPlacement(x, y)) return;
     const cueBall = ballsRef.current[0];
@@ -426,7 +418,6 @@ function CueMasterApp() {
     setTurnMessage('✅ تم وضع الكرة بنجاح! حان وقت التصويب والضرب.');
   };
 
-  // Helper to re-spot uncalled potted ball onto table (تطلع تاني على نقطة الرص)
   const respotBall = (ball: Ball) => {
     const tableRight = TABLE_WIDTH - CUSHION;
     const footSpotX = CUSHION + (tableRight - CUSHION) * 0.72;
@@ -435,7 +426,6 @@ function CueMasterApp() {
     let targetX = footSpotX;
     let targetY = footSpotY;
 
-    // Check if spot is occupied, shift towards cushion
     while (ballsRef.current.some(b => !b.isPotted && Math.hypot(b.x - targetX, b.y - targetY) < BALL_RADIUS * 2.1)) {
       targetX += BALL_RADIUS * 2.2;
       if (targetX > tableRight - BALL_RADIUS - 5) {
@@ -483,7 +473,6 @@ function CueMasterApp() {
           anyMoving = true;
         }
 
-        // Cushion Bounces
         const minX = CUSHION + ball.radius;
         const maxX = TABLE_WIDTH - CUSHION - ball.radius;
         const minY = CUSHION + ball.radius;
@@ -513,7 +502,7 @@ function CueMasterApp() {
         });
       });
 
-      // 2. Ball-to-Ball Collisions (Sub-stepped without feedback lag)
+      // 2. Ball-to-Ball Collisions
       for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
           const b1 = balls[i];
@@ -543,7 +532,7 @@ function CueMasterApp() {
             b2.vx += p * nx * 0.92;
             b2.vy += p * ny * 0.92;
 
-            // Track First Ball Hit by Cue Ball (Requirement 2)
+            // Track First Ball Hit by Cue Ball
             if (b1.type === 'cue' || b2.type === 'cue') {
               const targetB = b1.type === 'cue' ? b2 : b1;
               const cueB = b1.type === 'cue' ? b1 : b2;
@@ -552,7 +541,7 @@ function CueMasterApp() {
                 firstBallHitInShotRef.current = targetB;
               }
 
-              // Apply Spin Impulse (Screw / Backspin or Topspin)
+              // Spin (Screw / Topspin / English)
               if (spinY < -0.2) {
                 const screwForce = Math.abs(spinY) * 5.5;
                 cueB.vx += -nx * screwForce;
@@ -586,7 +575,6 @@ function CueMasterApp() {
         const firstHit = firstBallHitInShotRef.current;
         const activeShooter = turn;
 
-        // Reset references for next shot
         pottedInCurrentShotRef.current = [];
         cueScratchedInShotRef.current = false;
         firstBallHitInShotRef.current = null;
@@ -600,61 +588,55 @@ function CueMasterApp() {
           // CHECK RULE: 8-Ball Potting
           const black8Entry = pottedList.find(item => item.ball.number === 8);
           if (black8Entry) {
-            // Case A: Scratched on 8-ball = Immediate Loss!
             if (cueScratched) {
               if (activeShooter === 'human') triggerGameOver('bot', '❌ خسرت المباراة! أسقطت الكرة البيضاء مع الكرة السوداء رقم 8.');
               else triggerGameOver('human', '🎉 مبروك الفوز! الخصم أسقط الكرة البيضاء مع الكرة السوداء رقم 8.');
               return;
             }
 
-            // Case B: Potted 8-ball BEFORE clearing all assigned balls = Immediate Loss!
             if (remainingTargetBalls.length > 0 || shooterGroup === 'unassigned') {
               if (activeShooter === 'human') triggerGameOver('bot', '❌ خسرت المباراة! أسقطت الكرة السوداء رقم 8 قبل تصفية جميع كراتك.');
               else triggerGameOver('human', '🎉 مبروك الفوز! الخصم أسقط الكرة السوداء رقم 8 قبل تصفية كراته.');
               return;
             }
 
-            // Case C: Potted 8-ball in WRONG uncalled pocket = Immediate Loss!
             if (calledPocketId !== null && black8Entry.pocketId !== calledPocketId) {
               if (activeShooter === 'human') triggerGameOver('bot', '❌ خسرت المباراة! الكرة السوداء 8 سقطت في جيب غير الجيب المحدد.');
               else triggerGameOver('human', '🎉 مبروك الفوز! الخصم أسقط الكرة السوداء 8 في جيب غير الجيب المحدد.');
               return;
             }
 
-            // Case D: Legal 8-Ball in called pocket = VICTORY!
             if (activeShooter === 'human') triggerGameOver('human', '🏆 مبروك الفوز الساحق! أحرزت الكرة السوداء رقم 8 في الجيب المحدد بعد تصفية كراتك!');
             else triggerGameOver('bot', 'خسرت المباراة! الخصم أحرز الكرة السوداء رقم 8 وفاز بالجولة.');
             return;
           }
 
-          // CHECK FOUL RULE 1: Cue Ball Scratched
+          // CHECK FOUL RULES:
           let foulOccurred = false;
           let foulReason = '';
 
           if (cueScratched) {
             foulOccurred = true;
             foulReason = 'سقوط الكرة البيضاء في الجيب (Scratch).';
-          }
-          // CHECK FOUL RULE 2: No Ball Touched (Requirement 2)
-          else if (!firstHit) {
+          } else if (!firstHit) {
             foulOccurred = true;
             foulReason = 'الكرة البيضاء لم تلمس أي كرة على الإطلاق!';
-          }
-          // CHECK FOUL RULE 3: Wrong Ball Hit First (Requirement 2)
-          else if (shooterGroup !== 'unassigned') {
+          } else if (shooterGroup === 'unassigned' && firstHit.number === 8) {
+            foulOccurred = true;
+            foulReason = 'الطاولة مفتوحة: لا يجوز لمس الكرة السوداء رقم 8 أولاً!';
+          } else if (shooterGroup !== 'unassigned') {
             if (remainingTargetBalls.length > 0) {
               const expectedType = shooterGroup === 'solids' ? 'solid' : 'stripe';
               if (firstHit.type !== expectedType) {
                 foulOccurred = true;
                 foulReason = firstHit.number === 8 
                   ? 'لمست الكرة السوداء رقم 8 أولاً قبل تصفية كراتك!' 
-                  : 'لمست كرة صنف الخصم أولاً!';
+                  : (shooterGroup === 'solids' ? 'لمست كرة (ألوان/مخطط) وصنفك هو سادة!' : 'لمست كرة (سادة) وصنفك هو ألوان/مخطط!');
               }
             } else {
-              // On 8-ball: must hit 8-ball first
               if (firstHit.number !== 8) {
                 foulOccurred = true;
-                foulReason = 'لم تلمس الكرة السوداء رقم 8 أولاً!';
+                foulReason = 'أنهيت كراتك، يجب لمس الكرة السوداء رقم 8 أولاً!';
               }
             }
           }
@@ -666,10 +648,9 @@ function CueMasterApp() {
               setTurn(nextTurn);
               if (nextTurn === 'human') {
                 setIsBallInHand(true);
-                setTurnMessage(`✋ خطأ على الخصم: (${foulReason}) الكرة في يدك، اسحب أو اضغط لوضع الكرة البيضاء.`);
+                setTurnMessage(`✋ خطأ على الخصم: (${foulReason}) الكرة في يدك الآن!`);
               } else {
                 setTurnMessage(`⚠️ فاول عليك: (${foulReason}) الكرة في يد الخصم الآن.`);
-                // Bot automatically places ball
                 setTimeout(() => {
                   const cb = ballsRef.current[0];
                   if (cb) {
@@ -688,7 +669,7 @@ function CueMasterApp() {
             return;
           }
 
-          // CHECK CALL POCKET RULE (Requirement 3: كرة في جيب غير محدد ترجع للطاولة!)
+          // CHECK CALL POCKET RULE: Potted in uncalled pocket returns to table!
           const legallyCalledPots: Ball[] = [];
           const wrongPocketPots: Ball[] = [];
 
@@ -697,7 +678,6 @@ function CueMasterApp() {
               legallyCalledPots.push(ball);
             } else {
               wrongPocketPots.push(ball);
-              // Respot ball back onto the table!
               respotBall(ball);
             }
           });
@@ -706,23 +686,35 @@ function CueMasterApp() {
             setTurnMessage(`⚠️ كرة سقطت في جيب غير محدد (${wrongPocketPots.map(b => b.number).join(',')})! تم إرجاعها للطاولة.`);
           }
 
-          // Assign Groups if Table is Open
+          // ASSIGN GROUPS: First legal pot determines Solids (سادة) vs Stripes (ألوان)
           if (humanGroup === 'unassigned' && legallyCalledPots.length > 0) {
             const firstLegal = legallyCalledPots.find(b => b.type === 'solid' || b.type === 'stripe');
             if (firstLegal) {
+              const isSolid = firstLegal.type === 'solid';
               if (activeShooter === 'human') {
-                setHumanGroup(firstLegal.type === 'solid' ? 'solids' : 'stripes');
-                setBotGroup(firstLegal.type === 'solid' ? 'stripes' : 'solids');
-                setTurnMessage(`🎱 أصبحت كراتك: [${firstLegal.type === 'solid' ? 'سولد (1-7)' : 'مخطط (9-15)'}]!`);
+                setHumanGroup(isSolid ? 'solids' : 'stripes');
+                setBotGroup(isSolid ? 'stripes' : 'solids');
+                setGroupAnnouncement({
+                  title: '🎉 أحرزت أول كرة بنجاح وتم تحديد الأصناف!',
+                  human: isSolid ? 'سادة (Solids 1-7) 🟡🔴' : 'ألوان (Stripes 9-15) 🔵⚪',
+                  bot: isSolid ? 'ألوان (Stripes 9-15) 🔵⚪' : 'سادة (Solids 1-7) 🟡🔴'
+                });
+                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? 'سادة 🟡 (1-7)' : 'ألوان 🔵 (9-15)'}]!`);
               } else {
-                setBotGroup(firstLegal.type === 'solid' ? 'solids' : 'stripes');
-                setHumanGroup(firstLegal.type === 'solid' ? 'stripes' : 'solids');
-                setTurnMessage(`🎱 كرات الخصم: [${firstLegal.type === 'solid' ? 'سولد (1-7)' : 'مخطط (9-15)'}]!`);
+                setBotGroup(isSolid ? 'solids' : 'stripes');
+                setHumanGroup(isSolid ? 'stripes' : 'solids');
+                setGroupAnnouncement({
+                  title: '🤖 الخصم أحرز أول كرة وتم تحديد الأصناف!',
+                  human: isSolid ? 'ألوان (Stripes 9-15) 🔵⚪' : 'سادة (Solids 1-7) 🟡🔴',
+                  bot: isSolid ? 'سادة (Solids 1-7) 🟡🔴' : 'ألوان (Stripes 9-15) 🔵⚪'
+                });
+                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? 'ألوان 🔵 (9-15)' : 'سادة 🟡 (1-7)'}]!`);
               }
+              setTimeout(() => setGroupAnnouncement(null), 4500);
             }
           }
 
-          // Check if Shooter keeps their turn! (Requirement 3 & Turn Continuation)
+          // Check if Shooter keeps their turn
           const currentShooterGroup = activeShooter === 'human' ? humanGroup : botGroup;
           const pottedLegalBallInCalledPocket = legallyCalledPots.some(b => 
             currentShooterGroup === 'unassigned'
@@ -731,15 +723,13 @@ function CueMasterApp() {
           );
 
           if (pottedLegalBallInCalledPocket) {
-            // Keep Turn!
             if (activeShooter === 'human') setHumanScore(s => s + legallyCalledPots.length);
             else setBotScore(s => s + legallyCalledPots.length);
-            setTurnMessage('🔥 ضربة متقنة في الجيب المحدد! دورك مستمر للضربة التالية!');
+            setTurnMessage('🔥 ضربة صحيحة في الجيب المحدد! دورك مستمر للضربة التالية!');
           } else {
-            // No legal ball potted in called pocket: Switch Turn
             if (!isPractice) {
               setTurn(activeShooter === 'human' ? 'bot' : 'human');
-              setTurnMessage(activeShooter === 'human' ? 'دور الخصم الآن...' : 'دورك الآن! حدد الجيب واضرب.');
+              setTurnMessage(activeShooter === 'human' ? 'دور الخصم الآن...' : 'دورك الآن! تأكد من لمس صنفك أولاً.');
             }
           }
 
@@ -811,7 +801,7 @@ function CueMasterApp() {
         ctx.stroke();
       }
 
-      // 3. Pockets & Target Call Pocket Highlight (Requirement 3)
+      // 3. Pockets & Target Call Pocket Highlight
       pockets.forEach((p) => {
         const isTarget = calledPocketId === p.id;
 
@@ -850,7 +840,6 @@ function CueMasterApp() {
         ctx.arc(ball.x + 3, ball.y + 4, ball.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Render Stripes vs Solids
         if (ball.type === 'stripe') {
           ctx.fillStyle = '#f8fafc';
           ctx.beginPath();
@@ -899,7 +888,7 @@ function CueMasterApp() {
         }
       });
 
-      // 5. Ball-in-Hand Gloved Preview (Requirement 2 & 4)
+      // 5. Ball-in-Hand Gloved Preview
       if (isBallInHand && ballInHandHoverPos) {
         const isValid = isValidPlacement(ballInHandHoverPos.x, ballInHandHoverPos.y);
         ctx.fillStyle = isValid ? 'rgba(255, 255, 255, 0.75)' : 'rgba(239, 68, 68, 0.6)';
@@ -917,7 +906,7 @@ function CueMasterApp() {
         ctx.fillText('🧤', ballInHandHoverPos.x, ballInHandHoverPos.y - 18);
       }
 
-      // 6. AIM LINE RAYCASTING & OCCLUSION (Requirement 1: السهم يقف بعد أول كرة ولا يخترقها)
+      // 6. AIM LINE RAYCASTING & LEGAL TARGET VALIDATION (Red line if foul target!)
       const cueBall = balls[0];
       if ((turn === 'human' || isPractice) && !isShooting && !isBallInHand && cueBall && !cueBall.isPotted) {
         const cosA = Math.cos(aimAngle);
@@ -961,11 +950,41 @@ function CueMasterApp() {
           }
         }
 
-        // Aim line stops at contact point!
+        // Check if aimed hitBall is legal or illegal!
+        let isAimedTargetLegal = true;
+        let warningText = '';
+
+        if (hitBall && mode === '8-ball') {
+          if (humanGroup === 'unassigned') {
+            if (hitBall.number === 8) {
+              isAimedTargetLegal = false;
+              warningText = '⚠️ فاول: لا تلمس 8 الآن!';
+            }
+          } else {
+            const remainingHumanBalls = balls.filter(b => 
+              !b.isPotted && b.number !== 8 && (humanGroup === 'solids' ? b.type === 'solid' : b.type === 'stripe')
+            );
+            if (remainingHumanBalls.length > 0) {
+              const expectedType = humanGroup === 'solids' ? 'solid' : 'stripe';
+              if (hitBall.type !== expectedType) {
+                isAimedTargetLegal = false;
+                warningText = hitBall.number === 8 ? '⚠️ فاول: لا تلمس 8 الآن!' : '⚠️ فاول: صنف الخصم!';
+              }
+            } else {
+              // Final ball is 8
+              if (hitBall.number !== 8) {
+                isAimedTargetLegal = false;
+                warningText = '⚠️ فاول: هدفك الكرة 8!';
+              }
+            }
+          }
+        }
+
         const endAimX = cueBall.x + cosA * closestHitDist;
         const endAimY = cueBall.y + sinA * closestHitDist;
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        // Line color: Red if illegal, white if legal
+        ctx.strokeStyle = isAimedTargetLegal ? 'rgba(255, 255, 255, 0.75)' : 'rgba(239, 68, 68, 0.9)';
         ctx.setLineDash([5, 5]);
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -976,14 +995,14 @@ function CueMasterApp() {
 
         // Ghost Ball & Target Ball Path
         if (ghostBallPos && hitBall && targetDeflectDir) {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+          ctx.strokeStyle = isAimedTargetLegal ? 'rgba(255, 255, 255, 0.65)' : 'rgba(239, 68, 68, 0.85)';
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.arc(ghostBallPos.x, ghostBallPos.y, BALL_RADIUS, 0, Math.PI * 2);
           ctx.stroke();
 
-          // Target Ball Guide Line towards Pocket
-          ctx.strokeStyle = 'rgba(250, 204, 21, 0.85)';
+          // Target Ball Guide Line
+          ctx.strokeStyle = isAimedTargetLegal ? 'rgba(250, 204, 21, 0.85)' : 'rgba(239, 68, 68, 0.7)';
           ctx.setLineDash([4, 4]);
           ctx.lineWidth = 2;
           ctx.beginPath();
@@ -995,15 +1014,22 @@ function CueMasterApp() {
           ctx.stroke();
           ctx.setLineDash([]);
 
-          ctx.fillStyle = 'rgba(250, 204, 21, 0.35)';
+          ctx.fillStyle = isAimedTargetLegal ? 'rgba(250, 204, 21, 0.35)' : 'rgba(239, 68, 68, 0.4)';
           ctx.beginPath();
           ctx.arc(hitBall.x, hitBall.y, BALL_RADIUS + 3, 0, Math.PI * 2);
           ctx.fill();
+
+          if (!isAimedTargetLegal && warningText) {
+            ctx.fillStyle = '#ef4444';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(warningText, hitBall.x, hitBall.y - 18);
+          }
         }
 
-        // 7. Cue Stick with Dynamic Pull-Back Distance (Requirement 4)
+        // 7. Cue Stick with Dynamic Pull-Back
         const cueLength = 260;
-        const cueOffset = 22 + (power / 100) * 65; // Retracts backwards proportional to power!
+        const cueOffset = 22 + (power / 100) * 65;
         const cueStartX = cueBall.x - cosA * cueOffset;
         const cueStartY = cueBall.y - sinA * cueOffset;
         const cueEndX = cueBall.x - cosA * (cueOffset + cueLength);
@@ -1039,7 +1065,7 @@ function CueMasterApp() {
     };
   }, [currentView, mode, turn, aimAngle, power, isShooting, soundEnabled, aimAssistLong, feltColor, selectedCue, isPractice, isBallInHand, ballInHandHoverPos, calledPocketId, humanGroup, botGroup, spinX, spinY]);
 
-  // Handle Mouse Events: Aim, Ball-in-Hand, Drag-to-Pull Stick (Requirement 4)
+  // Handle Mouse Events: Aim, Ball-in-Hand, Drag-to-Pull Stick
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1059,7 +1085,6 @@ function CueMasterApp() {
 
     const cueBall = ballsRef.current[0];
     if (cueBall) {
-      // If dragging backwards to charge shot power (Requirement 4):
       if (isDraggingCueStick && dragStartPosRef.current) {
         const cosA = Math.cos(aimAngle);
         const sinA = Math.sin(aimAngle);
@@ -1086,7 +1111,6 @@ function CueMasterApp() {
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
-    // Check if clicking near pockets to Call Pocket (Requirement 3)
     for (const p of pockets) {
       if (Math.hypot(p.x - mouseX, p.y - mouseY) < 32) {
         setCalledPocketId(p.id);
@@ -1096,7 +1120,6 @@ function CueMasterApp() {
       }
     }
 
-    // Start cue drag pull-back
     setIsDraggingCueStick(true);
     dragStartPosRef.current = { x: mouseX, y: mouseY };
   };
@@ -1105,7 +1128,6 @@ function CueMasterApp() {
     if (isDraggingCueStick) {
       setIsDraggingCueStick(false);
       dragStartPosRef.current = null;
-      // If pulled back with significant power, release shot!
       if (power >= 25) {
         handleShoot();
       }
@@ -1122,13 +1144,11 @@ function CueMasterApp() {
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
-    // Check Ball-in-Hand placement
     if (isBallInHand) {
       handlePlaceCueBall(mouseX, mouseY);
       return;
     }
 
-    // Check Pocket Call
     for (const p of pockets) {
       if (Math.hypot(p.x - mouseX, p.y - mouseY) < 32) {
         setCalledPocketId(p.id);
@@ -1178,7 +1198,6 @@ function CueMasterApp() {
             }
           });
 
-          // Bot picks nearest pocket to target ball
           let bestPocket = pockets[0];
           let minPocketDist = 9999;
           pockets.forEach(p => {
@@ -1217,9 +1236,25 @@ function CueMasterApp() {
     setGameOver(null);
     setTurn('human');
     setActiveModal(null);
-    setTurnMessage('اختر الجيب المستهدف، اسحب المضرب واضرب!');
+    setTurnMessage('طاولة مفتوحة: أول كرة تسقطها تحدد صنفك (سادة أم ألوان)!');
     initBalls(targetMode);
     setCurrentView('table');
+  };
+
+  // Helper to get array of remaining balls for a group (1-7 or 9-15)
+  const getGroupBalls = (group: 'solids' | 'stripes') => {
+    const min = group === 'solids' ? 1 : 9;
+    const max = group === 'solids' ? 7 : 15;
+    const res: { num: number; potted: boolean; color: string }[] = [];
+    for (let i = min; i <= max; i++) {
+      const b = ballsRef.current.find(ball => ball.number === i);
+      res.push({
+        num: i,
+        potted: b ? b.isPotted : false,
+        color: BALL_CONFIG_MAP[i]?.color || '#ffffff'
+      });
+    }
+    return res;
   };
 
   return (
@@ -1395,30 +1430,62 @@ function CueMasterApp() {
       {/* 2. PLAYABLE CANVAS TABLE SCREEN WITH RULES & CONTROLS    */}
       {/* ======================================================== */}
       {currentView === 'table' && (
-        <div className="flex-1 flex flex-col justify-between overflow-hidden">
+        <div className="flex-1 flex flex-col justify-between overflow-hidden relative">
           
-          {/* Top Bar: Players, Groups & 8-Ball Status */}
+          {/* Top Bar: Players, Groups (سادة أم ألوان) & Real-time Ball Status */}
           <div className="bg-slate-950/95 border-b border-slate-800 p-3 md:p-4 flex flex-wrap justify-between items-center gap-4 z-20">
             
-            {/* Human Player */}
-            <div className={`flex items-center gap-3 p-2 rounded-xl transition-all ${turn === 'human' || isPractice ? 'bg-indigo-950/60 border border-indigo-500/60 shadow-[0_0_15px_rgba(99,102,241,0.3)]' : 'opacity-70'}`}>
-              <img src={avatar} alt={username} className="w-11 h-11 rounded-full border border-indigo-400 bg-slate-900" />
+            {/* Human Player Card */}
+            <div className={`flex items-center gap-3 p-2.5 rounded-2xl transition-all ${turn === 'human' || isPractice ? 'bg-indigo-950/70 border border-indigo-500/70 shadow-[0_0_20px_rgba(99,102,241,0.35)]' : 'opacity-75'}`}>
+              <img src={avatar} alt={username} className="w-12 h-12 rounded-full border-2 border-indigo-400 bg-slate-900" />
               <div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   <span className="text-xs font-black text-white">{username}</span>
-                  {(turn === 'human' || isPractice) && <span className="text-[10px] bg-indigo-500 text-white px-1.5 py-0.5 rounded-full font-bold animate-pulse">دورك!</span>}
+                  {(turn === 'human' || isPractice) && <span className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">دورك!</span>}
                 </div>
-                <div className="text-[11px] font-bold flex items-center gap-1.5 mt-0.5">
-                  <span className="text-amber-300">
-                    {mode === '8-ball' 
-                      ? (humanGroup === 'unassigned' ? 'الكرات: طاولة مفتوحة' : humanGroup === 'solids' ? 'كراتك: سولد 🟡 (1-7)' : 'كراتك: مخطط 🔵 (9-15)')
-                      : `النقاط: ${humanScore}`}
-                  </span>
-                </div>
+
+                {/* Group Badge & Mini Balls List */}
+                {mode === '8-ball' ? (
+                  <div className="mt-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-black ${
+                        humanGroup === 'unassigned' 
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700' 
+                          : humanGroup === 'solids' 
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                          : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                      }`}>
+                        {humanGroup === 'unassigned' ? 'طاولة مفتوحة ⚪' : humanGroup === 'solids' ? 'صنفك: سادة 🟡 (1-7)' : 'صنفك: ألوان 🔵 (9-15)'}
+                      </span>
+                    </div>
+
+                    {/* Visual Ball Inventory */}
+                    {humanGroup !== 'unassigned' && (
+                      <div className="flex gap-1 mt-1.5">
+                        {getGroupBalls(humanGroup).map(b => (
+                          <div
+                            key={b.num}
+                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black border transition-all ${
+                              b.potted 
+                                ? 'bg-slate-900 border-slate-800 text-slate-600 line-through opacity-30' 
+                                : 'text-slate-950 font-bold border-white/60 shadow'
+                            }`}
+                            style={{ backgroundColor: b.potted ? '#1e293b' : b.color }}
+                            title={`كرة رقم ${b.num} ${b.potted ? '(تم إسقاطها)' : '(متبقية)'}`}
+                          >
+                            {!b.potted && b.num}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-[11px] font-bold text-amber-300 mt-1">النقاط: {humanScore}</div>
+                )}
               </div>
             </div>
 
-            {/* Center Status Banner */}
+            {/* Center Status Banner & Call Pocket Alert */}
             <div className="text-center max-w-sm">
               <div className="text-xs font-black px-3.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 {turnMessage}
@@ -1429,23 +1496,55 @@ function CueMasterApp() {
               </div>
             </div>
 
-            {/* Opponent or Solo Info */}
+            {/* Opponent Card */}
             <div className="flex items-center gap-3">
               {!isPractice ? (
-                <div className={`flex items-center gap-3 p-2 rounded-xl transition-all ${turn === 'bot' ? 'bg-rose-950/60 border border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.3)]' : 'opacity-70'}`}>
+                <div className={`flex items-center gap-3 p-2.5 rounded-2xl transition-all ${turn === 'bot' ? 'bg-rose-950/70 border border-rose-500/70 shadow-[0_0_20px_rgba(244,63,94,0.35)]' : 'opacity-75'}`}>
                   <div className="text-left">
                     <div className="flex items-center justify-end gap-1.5">
-                      {turn === 'bot' && <span className="text-[10px] bg-rose-500 text-white px-1.5 py-0.5 rounded-full font-bold animate-pulse">يفكر...</span>}
+                      {turn === 'bot' && <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">يفكر...</span>}
                       <span className="text-xs font-black text-white">{opponentName}</span>
                       <span className="text-xs">{opponentFlag}</span>
                     </div>
-                    <div className="text-[11px] font-bold text-amber-300 text-left mt-0.5">
-                      {mode === '8-ball'
-                        ? (botGroup === 'unassigned' ? 'طاولة مفتوحة' : botGroup === 'solids' ? 'كراته: سولد 🟡' : 'كراته: مخطط 🔵')
-                        : `النقاط: ${botScore}`}
-                    </div>
+
+                    {mode === '8-ball' ? (
+                      <div className="mt-1">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-black ${
+                            botGroup === 'unassigned' 
+                              ? 'bg-slate-800 text-slate-300 border border-slate-700' 
+                              : botGroup === 'solids' 
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                              : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                          }`}>
+                            {botGroup === 'unassigned' ? 'طاولة مفتوحة ⚪' : botGroup === 'solids' ? 'صنفه: سادة 🟡 (1-7)' : 'صنفه: ألوان 🔵 (9-15)'}
+                          </span>
+                        </div>
+
+                        {botGroup !== 'unassigned' && (
+                          <div className="flex gap-1 mt-1.5 justify-end">
+                            {getGroupBalls(botGroup).map(b => (
+                              <div
+                                key={b.num}
+                                className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black border transition-all ${
+                                  b.potted 
+                                    ? 'bg-slate-900 border-slate-800 text-slate-600 line-through opacity-30' 
+                                    : 'text-slate-950 font-bold border-white/60 shadow'
+                                }`}
+                                style={{ backgroundColor: b.potted ? '#1e293b' : b.color }}
+                                title={`كرة الخصم رقم ${b.num} ${b.potted ? '(سقطت)' : '(متبقية)'}`}
+                              >
+                                {!b.potted && b.num}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] font-bold text-amber-300 text-left mt-1">النقاط: {botScore}</div>
+                    )}
                   </div>
-                  <img src={opponentAvatar} alt={opponentName} className="w-11 h-11 rounded-full border border-rose-400 bg-slate-900" />
+                  <img src={opponentAvatar} alt={opponentName} className="w-12 h-12 rounded-full border-2 border-rose-400 bg-slate-900" />
                 </div>
               ) : (
                 <div className="px-3 py-2 bg-slate-900 rounded-xl border border-slate-800 text-xs text-slate-400 font-bold">
@@ -1453,7 +1552,7 @@ function CueMasterApp() {
                 </div>
               )}
 
-              {/* Back to Cue Master Menu */}
+              {/* Menu Button */}
               <button
                 onClick={() => setCurrentView('menu')}
                 className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 text-xs font-black transition-all cursor-pointer shadow"
@@ -1461,7 +1560,6 @@ function CueMasterApp() {
                 🏠 قائمة كيو ماستر
               </button>
 
-              {/* Close iframe */}
               <button
                 onClick={handleCloseToParent}
                 className="p-2 rounded-xl bg-slate-900 hover:bg-rose-950/60 border border-slate-800 text-slate-400 hover:text-white text-xs font-bold transition-all cursor-pointer"
@@ -1472,6 +1570,26 @@ function CueMasterApp() {
             </div>
 
           </div>
+
+          {/* Group Assignment Big Announcement Modal */}
+          {groupAnnouncement && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-slate-950/95 border-2 border-amber-400 p-6 rounded-3xl shadow-[0_0_50px_rgba(245,158,11,0.5)] flex flex-col items-center justify-center space-y-4 animate-bounce text-center">
+              <span className="text-4xl">🎱</span>
+              <h3 className="text-lg font-black text-amber-300">{groupAnnouncement.title}</h3>
+              <div className="flex gap-4 items-center">
+                <div className="bg-slate-900 border border-indigo-500/50 px-4 py-2 rounded-2xl text-center">
+                  <div className="text-[10px] text-slate-400 font-bold">{username} (أنت)</div>
+                  <div className="text-sm font-black text-emerald-400 mt-0.5">{groupAnnouncement.human}</div>
+                </div>
+                <span className="text-slate-500 font-black text-xs">VS</span>
+                <div className="bg-slate-900 border border-rose-500/50 px-4 py-2 rounded-2xl text-center">
+                  <div className="text-[10px] text-slate-400 font-bold">{opponentName} (الخصم)</div>
+                  <div className="text-sm font-black text-rose-400 mt-0.5">{groupAnnouncement.bot}</div>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400">أي كرة تلمسها من صنف الخصم أولاً ستعتبر فاول فوري!</p>
+            </div>
+          )}
 
           {/* Canvas Table Area with Interactive Controls */}
           <div className="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-hidden relative">
@@ -1517,7 +1635,7 @@ function CueMasterApp() {
             {/* Bottom Controls Bar: Pockets Selector, Spin Controller, Cue Pull-Back Gauge */}
             <div className="w-full max-w-[960px] mt-3 bg-slate-950/90 border border-slate-800 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3">
               
-              {/* 1. Quick Call Pocket Selector (Requirement 3) */}
+              {/* 1. Quick Call Pocket Selector */}
               <div className="flex items-center gap-1.5 bg-slate-900/80 p-1.5 rounded-xl border border-slate-800">
                 <span className="text-[10px] font-black text-amber-300 ml-1">🎯 الجيب:</span>
                 {pockets.map((p) => (
@@ -1534,7 +1652,7 @@ function CueMasterApp() {
                 ))}
               </div>
 
-              {/* 2. Cue Ball Spin / English Widget (اسكروه، باك سبن، توب سبن) */}
+              {/* 2. Cue Ball Spin / English Widget */}
               <div className="flex items-center gap-2.5 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
                 <div
                   className="w-12 h-12 rounded-full bg-gradient-to-br from-white via-slate-100 to-slate-300 relative shadow-inner border-2 border-slate-600 cursor-pointer flex items-center justify-center overflow-hidden"
@@ -1583,7 +1701,7 @@ function CueMasterApp() {
                 </div>
               </div>
 
-              {/* 3. Interactive Cue Stick Pull-Back Gauge (Requirement 4) */}
+              {/* 3. Interactive Cue Stick Pull-Back Gauge */}
               <div className="flex items-center gap-2.5 flex-1 max-w-[200px] bg-slate-900/80 p-2 rounded-xl border border-slate-800">
                 <span className="text-[11px] font-black text-amber-300 whitespace-nowrap">سحب المضرب:</span>
                 <input
