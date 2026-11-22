@@ -287,12 +287,12 @@ function CueMasterApp() {
 
   // 6 Calibrated Table Pockets (Exact mouth of the black holes on all tables)
   const pockets: Pocket[] = [
-    { id: 0, name: "أعلى يسار", x: 64, y: 54 },
-    { id: 1, name: "أعلى وسط", x: 450, y: 40 },
-    { id: 2, name: "أعلى يمين", x: 836, y: 54 },
-    { id: 3, name: "أسفل يسار", x: 64, y: 396 },
-    { id: 4, name: "أسفل وسط", x: 450, y: 403 },
-    { id: 5, name: "أسفل يمين", x: 836, y: 396 },
+    { id: 0, name: "أعلى يسار", x: 52, y: 46 },
+    { id: 1, name: "أعلى وسط", x: 450, y: 35 },
+    { id: 2, name: "أعلى يمين", x: 848, y: 46 },
+    { id: 3, name: "أسفل يسار", x: 52, y: 404 },
+    { id: 4, name: "أسفل وسط", x: 450, y: 415 },
+    { id: 5, name: "أسفل يمين", x: 848, y: 404 },
   ];
 
   // Preload Storage & Assets
@@ -669,13 +669,13 @@ function CueMasterApp() {
             const dist = Math.hypot(dx, dy);
 
             // Inward funnel suction towards pocket mouth
-            if (dist < 26 && dist > 0.5) {
-              const pull = 0.4 * (1 - dist / 26);
+            if (dist < 30 && dist > 0.5) {
+              const pull = 0.45 * (1 - dist / 30);
               ball.vx += (dx / dist) * pull;
               ball.vy += (dy / dist) * pull;
             }
 
-            if (dist < 20) {
+            if (dist < 22) {
               ball.isPotted = true;
               ball.vx = 0;
               ball.vy = 0;
@@ -690,7 +690,7 @@ function CueMasterApp() {
           });
 
           // Outer table safety catch (if a ball rolls behind a pocket cavity)
-          if (ball.x < 50 || ball.x > TABLE_WIDTH - 50 || ball.y < 38 || ball.y > TABLE_HEIGHT - 38) {
+          if (ball.x < 42 || ball.x > TABLE_WIDTH - 42 || ball.y < 32 || ball.y > TABLE_HEIGHT - 32) {
             const nearestP = pockets.reduce((prev, curr) => Math.hypot(curr.x - ball.x, curr.y - ball.y) < Math.hypot(prev.x - ball.x, prev.y - ball.y) ? curr : prev);
             ball.isPotted = true;
             ball.vx = 0;
@@ -863,8 +863,12 @@ function CueMasterApp() {
             foulOccurred = true;
             foulReason = "الطاولة مفتوحة: لا يجوز لمس الكرة السوداء رقم 8 أولاً!";
           } else if (shooterGroup !== "unassigned") {
-            if (remainingTargetBalls.length > 0) {
-              const expectedType = shooterGroup === "solids" ? "solid" : "stripe";
+            const expectedType = shooterGroup === "solids" ? "solid" : "stripe";
+            // Check if shooter had balls of their own group at the start of this shot
+            const shooterBallsPottedThisShot = pottedList.filter((item) => item.ball.type === expectedType).length;
+            const hadGroupBallsBeforeShot = (remainingTargetBalls.length + shooterBallsPottedThisShot) > 0;
+
+            if (hadGroupBallsBeforeShot) {
               if (firstHit.type !== expectedType) {
                 foulOccurred = true;
                 foulReason = firstHit.number === 8
@@ -1064,20 +1068,20 @@ function CueMasterApp() {
           ctx.lineWidth = 2.5;
           ctx.setLineDash([4, 4]);
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 17, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, 16, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
 
           // Soft golden aura inside the pocket mouth
           ctx.fillStyle = "rgba(234, 179, 8, 0.22)";
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
           ctx.fill();
 
           ctx.fillStyle = "#eab308";
           ctx.font = "bold 10px sans-serif";
           ctx.textAlign = "center";
-          ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 30 : -22));
+          ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 28 : -22));
         }
       });
 
