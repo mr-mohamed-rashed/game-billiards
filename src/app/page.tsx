@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
-import { Suspense, useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { ALL_CUES, ALL_TABLES, CueItem, TableItem } from "@/config/shopData";
 
 export default function BilliardsStandalonePage() {
   return (
@@ -20,7 +21,7 @@ interface Ball {
   radius: number;
   color: string;
   number: number;
-  type: 'cue' | 'solid' | 'stripe' | 'black' | 'red' | 'color';
+  type: "cue" | "solid" | "stripe" | "black" | "red" | "color";
   isPotted: boolean;
   value?: number;
 }
@@ -39,12 +40,12 @@ let sharedAudioCtx: AudioContext | null = null;
 let lastClackSoundTime = 0;
 
 function getAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   if (!sharedAudioCtx) {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) sharedAudioCtx = new AudioContextClass();
   }
-  if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+  if (sharedAudioCtx && sharedAudioCtx.state === "suspended") {
     sharedAudioCtx.resume().catch(() => {});
   }
   return sharedAudioCtx;
@@ -52,58 +53,53 @@ function getAudioContext(): AudioContext | null {
 
 function playBallClack(relativeSpeed: number) {
   const now = performance.now();
-  if (now - lastClackSoundTime < 45) return;
+  if (now - lastClackSoundTime < 40) return;
   lastClackSoundTime = now;
 
   const ctx = getAudioContext();
   if (!ctx) return;
   const t = ctx.currentTime;
-  const vol = Math.min(1, Math.max(0.15, relativeSpeed / 12));
 
-  // High-Frequency Aramith click
-  const osc1 = ctx.createOscillator();
-  const gain1 = ctx.createGain();
-  osc1.type = 'sine';
-  osc1.frequency.setValueAtTime(3200, t);
-  osc1.frequency.exponentialRampToValueAtTime(700, t + 0.022);
-  gain1.gain.setValueAtTime(0.55 * vol, t);
-  gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.022);
-  osc1.connect(gain1);
-  gain1.connect(ctx.destination);
-  osc1.start(t);
-  osc1.stop(t + 0.022);
-
-  // Acoustic body resonance
-  const osc2 = ctx.createOscillator();
-  const gain2 = ctx.createGain();
-  osc2.type = 'triangle';
-  osc2.frequency.setValueAtTime(980, t);
-  osc2.frequency.exponentialRampToValueAtTime(260, t + 0.04);
-  gain2.gain.setValueAtTime(0.35 * vol, t);
-  gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-  osc2.connect(gain2);
-  gain2.connect(ctx.destination);
-  osc2.start(t);
-  osc2.stop(t + 0.04);
-}
-
-function playCueStrike(powerPercent: number) {
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  const t = ctx.currentTime;
-  const vol = Math.min(1, Math.max(0.25, powerPercent / 100));
+  const vol = Math.min(1.0, Math.max(0.12, relativeSpeed / 16));
 
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(380, t);
-  osc.frequency.exponentialRampToValueAtTime(45, t + 0.11);
-  gain.gain.setValueAtTime(0.65 * vol, t);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
-  osc.connect(gain);
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(1420 + Math.random() * 260, t);
+  osc.frequency.exponentialRampToValueAtTime(320, t + 0.045);
+
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(1800, t);
+  filter.Q.setValueAtTime(3.8, t);
+
+  gain.gain.setValueAtTime(vol * 0.95, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
+
+  osc.connect(filter);
+  filter.connect(gain);
   gain.connect(ctx.destination);
+
   osc.start(t);
-  osc.stop(t + 0.11);
+  osc.stop(t + 0.06);
+
+  try {
+    const bufferSize = Math.floor(ctx.sampleRate * 0.025);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.005));
+    }
+    const whiteNoise = ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(vol * 0.45, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+    whiteNoise.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    whiteNoise.start(t);
+  } catch {}
 }
 
 function playPocketDrop() {
@@ -113,10 +109,10 @@ function playPocketDrop() {
 
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(145, t);
-  osc.frequency.exponentialRampToValueAtTime(32, t + 0.22);
-  gain.gain.setValueAtTime(0.6, t);
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(160, t);
+  osc.frequency.exponentialRampToValueAtTime(55, t + 0.16);
+  gain.gain.setValueAtTime(0.85, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
   osc.connect(gain);
   gain.connect(ctx.destination);
@@ -124,81 +120,123 @@ function playPocketDrop() {
   osc.stop(t + 0.22);
 }
 
+function playCueStrike(power: number) {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const vol = Math.min(1.0, Math.max(0.2, power / 100));
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(460, t);
+  osc.frequency.exponentialRampToValueAtTime(110, t + 0.07);
+  gain.gain.setValueAtTime(vol * 0.9, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.08);
+}
+
 function playFoulBuzzer() {
   const ctx = getAudioContext();
   if (!ctx) return;
   const t = ctx.currentTime;
-
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(170, t);
-  osc.frequency.linearRampToValueAtTime(85, t + 0.26);
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(130, t);
+  osc.frequency.setValueAtTime(110, t + 0.12);
   gain.gain.setValueAtTime(0.4, t);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.start(t);
-  osc.stop(t + 0.26);
+  osc.stop(t + 0.28);
+}
+
+function playSuccessChime() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, t + i * 0.08);
+    gain.gain.setValueAtTime(0.25, t + i * 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t + i * 0.08);
+    osc.stop(t + i * 0.08 + 0.25);
+  });
 }
 
 // Official 8-Ball Ball Mapping
-const BALL_CONFIG_MAP: Record<number, { color: string; type: 'solid' | 'stripe' | 'black'; nameAr: string }> = {
-  1: { color: '#facc15', type: 'solid', nameAr: 'صفراء سادة (1)' },
-  2: { color: '#2563eb', type: 'solid', nameAr: 'زرقاء سادة (2)' },
-  3: { color: '#dc2626', type: 'solid', nameAr: 'حمراء سادة (3)' },
-  4: { color: '#9333ea', type: 'solid', nameAr: 'بنفسجية سادة (4)' },
-  5: { color: '#ea580c', type: 'solid', nameAr: 'برتقالية سادة (5)' },
-  6: { color: '#16a34a', type: 'solid', nameAr: 'خضراء سادة (6)' },
-  7: { color: '#831843', type: 'solid', nameAr: 'عنابية سادة (7)' },
-  8: { color: '#09090b', type: 'black', nameAr: 'السوداء (8)' },
-  9: { color: '#facc15', type: 'stripe', nameAr: 'صفراء ألوان (9)' },
-  10: { color: '#2563eb', type: 'stripe', nameAr: 'زرقاء ألوان (10)' },
-  11: { color: '#dc2626', type: 'stripe', nameAr: 'حمراء ألوان (11)' },
-  12: { color: '#9333ea', type: 'stripe', nameAr: 'بنفسجية ألوان (12)' },
-  13: { color: '#ea580c', type: 'stripe', nameAr: 'برتقالية ألوان (13)' },
-  14: { color: '#16a34a', type: 'stripe', nameAr: 'خضراء ألوان (14)' },
-  15: { color: '#831843', type: 'stripe', nameAr: 'عنابية ألوان (15)' },
+const BALL_CONFIG_MAP: Record<number, { color: string; type: "solid" | "stripe" | "black"; nameAr: string }> = {
+  1: { color: "#facc15", type: "solid", nameAr: "صفراء سادة (1)" },
+  2: { color: "#2563eb", type: "solid", nameAr: "زرقاء سادة (2)" },
+  3: { color: "#dc2626", type: "solid", nameAr: "حمراء سادة (3)" },
+  4: { color: "#9333ea", type: "solid", nameAr: "بنفسجية سادة (4)" },
+  5: { color: "#ea580c", type: "solid", nameAr: "برتقالية سادة (5)" },
+  6: { color: "#16a34a", type: "solid", nameAr: "خضراء سادة (6)" },
+  7: { color: "#831843", type: "solid", nameAr: "عنابية سادة (7)" },
+  8: { color: "#09090b", type: "black", nameAr: "السوداء (8)" },
+  9: { color: "#facc15", type: "stripe", nameAr: "صفراء ألوان (9)" },
+  10: { color: "#2563eb", type: "stripe", nameAr: "زرقاء ألوان (10)" },
+  11: { color: "#dc2626", type: "stripe", nameAr: "حمراء ألوان (11)" },
+  12: { color: "#9333ea", type: "stripe", nameAr: "بنفسجية ألوان (12)" },
+  13: { color: "#ea580c", type: "stripe", nameAr: "برتقالية ألوان (13)" },
+  14: { color: "#16a34a", type: "stripe", nameAr: "خضراء ألوان (14)" },
+  15: { color: "#831843", type: "stripe", nameAr: "عنابية ألوان (15)" },
 };
 
 function CueMasterApp() {
   const searchParams = useSearchParams();
-  const userId = searchParams.get('userId') || 'guest';
-  const username = searchParams.get('username') || 'لاعب 1';
-  const avatar = searchParams.get('avatar') || 'https://api.dicebear.com/7.x/bottts/svg?seed=CueMaster';
-  const initialStake = parseInt(searchParams.get('stake') || '100');
-  const initialPrize = parseInt(searchParams.get('prize') || '190');
-  const initialMode = (searchParams.get('mode') as '8-ball' | 'snooker') || '8-ball';
-  const opponentName = searchParams.get('opponentName') || 'أحمد_البرنس';
-  const opponentAvatar = searchParams.get('opponentAvatar') || 'https://api.dicebear.com/7.x/bottts/svg?seed=AhmedEG';
-  const opponentFlag = searchParams.get('opponentFlag') || '🇪🇬';
+  const userId = searchParams.get("userId") || "guest";
+  const username = searchParams.get("username") || "لاعب 1";
+  const avatar = searchParams.get("avatar") || "https://api.dicebear.com/7.x/bottts/svg?seed=CueMaster";
+  const initialStake = parseInt(searchParams.get("stake") || "100");
+  const initialPrize = parseInt(searchParams.get("prize") || "190");
+  const initialMode = (searchParams.get("mode") as "8-ball" | "snooker") || "8-ball";
+  const opponentName = searchParams.get("opponentName") || "أحمد_البرنس";
+  const opponentAvatar = searchParams.get("opponentAvatar") || "https://api.dicebear.com/7.x/bottts/svg?seed=AhmedEG";
+  const opponentFlag = searchParams.get("opponentFlag") || "🇪🇬";
 
   // Navigation & Modals
-  const [currentView, setCurrentView] = useState<'menu' | 'table'>('menu');
-  const [activeModal, setActiveModal] = useState<'settings' | 'shop' | 'leaderboard' | 'tournaments' | 'stake_select' | null>(null);
+  const [currentView, setCurrentView] = useState<"menu" | "table">("menu");
+  const [activeModal, setActiveModal] = useState<"settings" | "shop" | "leaderboard" | "tournaments" | "stake_select" | null>(null);
+
+  // Shop & Inventory State
+  const [shopTab, setShopTab] = useState<"cues" | "tables">("cues");
+  const [cueCategoryFilter, setCueCategoryFilter] = useState<"all" | "classic" | "legendary">("all");
+  const [selectedCue, setSelectedCue] = useState<string>("cue_maple_standard");
+  const [selectedTable, setSelectedTable] = useState<string>("classic");
+  const [unlockedCues, setUnlockedCues] = useState<string[]>(["cue_maple_standard"]);
+  const [unlockedTables, setUnlockedTables] = useState<string[]>(["classic"]);
+  const [coins, setCoins] = useState(85000);
+  const [gems, setGems] = useState(250);
 
   // Settings
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [aimAssistLong, setAimAssistLong] = useState(true);
-  const [feltColor, setFeltColor] = useState<'green' | 'blue' | 'snooker'>('green');
-  const [selectedCue, setSelectedCue] = useState('classic');
 
   // Match State
-  const [mode, setMode] = useState<'8-ball' | 'snooker'>(initialMode);
+  const [mode, setMode] = useState<"8-ball" | "snooker">(initialMode);
   const [isPractice, setIsPractice] = useState(false);
   const [stake, setStake] = useState(initialStake);
   const [prize, setPrize] = useState(initialPrize);
-  const [coins, setCoins] = useState(10500);
-  const [gems, setGems] = useState(150);
 
   // Official 8-Ball Game State: Groups Assignment (سادة 1-7 أم ألوان 9-15)
-  const [humanGroup, setHumanGroup] = useState<'unassigned' | 'solids' | 'stripes'>('unassigned');
-  const [botGroup, setBotGroup] = useState<'unassigned' | 'solids' | 'stripes'>('unassigned');
+  const [humanGroup, setHumanGroup] = useState<"unassigned" | "solids" | "stripes">("unassigned");
+  const [botGroup, setBotGroup] = useState<"unassigned" | "solids" | "stripes">("unassigned");
   const [groupAnnouncement, setGroupAnnouncement] = useState<{ title: string; human: string; bot: string } | null>(null);
 
   // Call Pocket
   const [calledPocketId, setCalledPocketId] = useState<number | null>(0);
-  const activeShotCalledPocketRef = useRef<number | null>(0); // Snapshot when shot was fired!
+  const activeShotCalledPocketRef = useRef<number | null>(0);
   const activeShotAimAngleRef = useRef<number>(0);
   const spinAppliedInCurrentShotRef = useRef<boolean>(false);
 
@@ -214,8 +252,8 @@ function CueMasterApp() {
   const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Table Engine State
-  const [turn, setTurn] = useState<'human' | 'bot'>('human');
-  const [turnMessage, setTurnMessage] = useState('طاولة مفتوحة: أول كرة تسقطها تحدد صنفك (سادة أم ألوان)!');
+  const [turn, setTurn] = useState<"human" | "bot">("human");
+  const [turnMessage, setTurnMessage] = useState("طاولة مفتوحة: أول كرة تسقطها تحدد صنفك (سادة أم ألوان)!");
   const [humanScore, setHumanScore] = useState(0);
   const [botScore, setBotScore] = useState(0);
   const [power, setPower] = useState(65);
@@ -226,11 +264,16 @@ function CueMasterApp() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ballsRef = useRef<Ball[]>([]);
   const animFrameRef = useRef<number | null>(null);
+  const tableImageCacheRef = useRef<Record<string, HTMLImageElement>>({});
 
-  // Track Shot Events: First Ball Hit & Potted Balls with their Pockets
+  // Shot Resolution Tracking
   const firstBallHitInShotRef = useRef<Ball | null>(null);
   const pottedInCurrentShotRef = useRef<{ ball: Ball; pocketId: number }[]>([]);
   const cueScratchedInShotRef = useRef<boolean>(false);
+
+  // Active Cue and Table Objects
+  const activeCue = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
+  const currentTable = ALL_TABLES.find((t) => t.id === selectedTable) || ALL_TABLES[0];
 
   // Table Dimensions
   const TABLE_WIDTH = 900;
@@ -240,16 +283,56 @@ function CueMasterApp() {
 
   // 6 Official Table Pockets
   const pockets: Pocket[] = [
-    { id: 0, name: 'أعلى يسار', x: CUSHION + 10, y: CUSHION + 10 },
-    { id: 1, name: 'أعلى وسط', x: TABLE_WIDTH / 2, y: CUSHION + 5 },
-    { id: 2, name: 'أعلى يمين', x: TABLE_WIDTH - CUSHION - 10, y: CUSHION + 10 },
-    { id: 3, name: 'أسفل يسار', x: CUSHION + 10, y: TABLE_HEIGHT - CUSHION - 10 },
-    { id: 4, name: 'أسفل وسط', x: TABLE_WIDTH / 2, y: TABLE_HEIGHT - CUSHION - 5 },
-    { id: 5, name: 'أسفل يمين', x: TABLE_WIDTH - CUSHION - 10, y: TABLE_HEIGHT - CUSHION - 10 }
+    { id: 0, name: "أعلى يسار", x: CUSHION + 10, y: CUSHION + 10 },
+    { id: 1, name: "أعلى وسط", x: TABLE_WIDTH / 2, y: CUSHION + 5 },
+    { id: 2, name: "أعلى يمين", x: TABLE_WIDTH - CUSHION - 10, y: CUSHION + 10 },
+    { id: 3, name: "أسفل يسار", x: CUSHION + 10, y: TABLE_HEIGHT - CUSHION - 10 },
+    { id: 4, name: "أسفل وسط", x: TABLE_WIDTH / 2, y: TABLE_HEIGHT - CUSHION - 5 },
+    { id: 5, name: "أسفل يمين", x: TABLE_WIDTH - CUSHION - 10, y: TABLE_HEIGHT - CUSHION - 10 },
   ];
 
+  // Preload Storage & Assets
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sCoins = localStorage.getItem("cuemaster_coins");
+      if (sCoins) setCoins(parseInt(sCoins));
+      const sGems = localStorage.getItem("cuemaster_gems");
+      if (sGems) setGems(parseInt(sGems));
+      const sCue = localStorage.getItem("cuemaster_selected_cue");
+      if (sCue) setSelectedCue(sCue);
+      const sTable = localStorage.getItem("cuemaster_selected_table");
+      if (sTable) setSelectedTable(sTable);
+      const sUnlCues = localStorage.getItem("cuemaster_unlocked_cues");
+      if (sUnlCues) setUnlockedCues(JSON.parse(sUnlCues));
+      const sUnlTables = localStorage.getItem("cuemaster_unlocked_tables");
+      if (sUnlTables) setUnlockedTables(JSON.parse(sUnlTables));
+    } catch {}
+
+    // Preload table textures
+    ALL_TABLES.forEach((table) => {
+      if (table.image && !tableImageCacheRef.current[table.id]) {
+        const img = new Image();
+        img.src = table.image;
+        img.onload = () => {
+          tableImageCacheRef.current[table.id] = img;
+        };
+      }
+    });
+  }, []);
+
+  // Sync to Storage
+  const saveCoins = (val: number) => {
+    setCoins(val);
+    try { localStorage.setItem("cuemaster_coins", val.toString()); } catch {}
+  };
+  const saveGems = (val: number) => {
+    setGems(val);
+    try { localStorage.setItem("cuemaster_gems", val.toString()); } catch {}
+  };
+
   // Initialize Rack with Official Standard 8-Ball Positions
-  const initBalls = (currentMode: '8-ball' | 'snooker') => {
+  const initBalls = (currentMode: "8-ball" | "snooker") => {
     const balls: Ball[] = [];
     const tableLeft = CUSHION;
     const tableRight = TABLE_WIDTH - CUSHION;
@@ -263,175 +346,139 @@ function CueMasterApp() {
       vx: 0,
       vy: 0,
       radius: BALL_RADIUS,
-      color: '#ffffff',
+      color: "#f8fafc",
       number: 0,
-      type: 'cue',
-      isPotted: false
+      type: "cue",
+      isPotted: false,
     });
 
-    if (currentMode === '8-ball') {
-      const startX = tableLeft + (tableRight - tableLeft) * 0.7;
+    if (currentMode === "8-ball") {
+      const RACK_NUMBERS = [1, 9, 2, 3, 8, 10, 11, 4, 12, 5, 13, 6, 14, 7, 15];
+      const apexX = tableLeft + (tableRight - tableLeft) * 0.72;
+      const spacing = BALL_RADIUS * 2.04;
+      const rowSpacing = spacing * Math.cos(Math.PI / 6);
 
-      const RACK_NUMBERS = [
-        1,
-        9, 2,
-        3, 8, 10,
-        11, 4, 12, 5,
-        13, 6, 14, 7, 15
-      ];
-
-      let rackIdx = 0;
+      let ballIdx = 0;
       for (let r = 0; r < 5; r++) {
+        const rowX = apexX + r * rowSpacing;
+        const startY = centerY - (r * spacing) / 2;
         for (let c = 0; c <= r; c++) {
-          if (rackIdx >= RACK_NUMBERS.length) break;
-          const ballNum = RACK_NUMBERS[rackIdx];
+          const ballNum = RACK_NUMBERS[ballIdx++];
           const cfg = BALL_CONFIG_MAP[ballNum];
-
-          const x = startX + r * (BALL_RADIUS * 1.85);
-          const y = centerY + (c - r / 2) * (BALL_RADIUS * 2.1);
-
           balls.push({
             id: ballNum,
-            x,
-            y,
+            x: rowX,
+            y: startY + c * spacing,
             vx: 0,
             vy: 0,
             radius: BALL_RADIUS,
             color: cfg.color,
             number: ballNum,
             type: cfg.type,
-            isPotted: false
+            isPotted: false,
           });
-          rackIdx++;
         }
       }
     } else {
-      // Snooker Setup
-      const startX = tableLeft + (tableRight - tableLeft) * 0.72;
-      let redId = 1;
+      // Snooker Rack Setup
+      let sId = 1;
+      const apexX = tableLeft + (tableRight - tableLeft) * 0.75;
+      const spacing = BALL_RADIUS * 2.05;
+      const rowSpacing = spacing * Math.cos(Math.PI / 6);
+
       for (let r = 0; r < 5; r++) {
+        const rowX = apexX + r * rowSpacing;
+        const startY = centerY - (r * spacing) / 2;
         for (let c = 0; c <= r; c++) {
           balls.push({
-            id: redId,
-            x: startX + r * (BALL_RADIUS * 1.8),
-            y: centerY + (c - r / 2) * (BALL_RADIUS * 2.05),
+            id: sId++,
+            x: rowX,
+            y: startY + c * spacing,
             vx: 0,
             vy: 0,
-            radius: BALL_RADIUS * 0.95,
-            color: '#ef4444',
+            radius: BALL_RADIUS,
+            color: "#dc2626",
             number: 1,
-            type: 'red',
+            type: "red",
             value: 1,
-            isPotted: false
+            isPotted: false,
           });
-          redId++;
         }
       }
 
       const colors = [
-        { name: 'Yellow', color: '#eab308', val: 2, x: tableLeft + 150, y: centerY - 60 },
-        { name: 'Green', color: '#16a34a', val: 3, x: tableLeft + 150, y: centerY + 60 },
-        { name: 'Brown', color: '#78350f', val: 4, x: tableLeft + 150, y: centerY },
-        { name: 'Blue', color: '#2563eb', val: 5, x: TABLE_WIDTH / 2, y: centerY },
-        { name: 'Pink', color: '#f43f5e', val: 6, x: startX - 35, y: centerY },
-        { name: 'Black', color: '#09090b', val: 7, x: tableRight - 60, y: centerY },
+        { name: "Yellow", color: "#facc15", val: 2, x: CUSHION + 150, y: centerY + 60 },
+        { name: "Green", color: "#16a34a", val: 3, x: CUSHION + 150, y: centerY - 60 },
+        { name: "Brown", color: "#78350f", val: 4, x: CUSHION + 150, y: centerY },
+        { name: "Blue", color: "#2563eb", val: 5, x: TABLE_WIDTH / 2, y: centerY },
+        { name: "Pink", color: "#ec4899", val: 6, x: apexX - 25, y: centerY },
+        { name: "Black", color: "#09090b", val: 7, x: tableRight - 55, y: centerY },
       ];
-
-      colors.forEach((c, idx) => {
+      colors.forEach((c) => {
         balls.push({
-          id: 50 + idx,
+          id: sId++,
           x: c.x,
           y: c.y,
           vx: 0,
           vy: 0,
-          radius: BALL_RADIUS * 0.95,
+          radius: BALL_RADIUS,
           color: c.color,
           number: c.val,
-          type: 'color',
+          type: "color",
           value: c.val,
-          isPotted: false
+          isPotted: false,
         });
       });
     }
 
     ballsRef.current = balls;
-    setHumanGroup('unassigned');
-    setBotGroup('unassigned');
+    setHumanGroup("unassigned");
+    setBotGroup("unassigned");
     setGroupAnnouncement(null);
+    setTurn("human");
+    setTurnMessage("طاولة مفتوحة: أول ضربة ناجحة في جيب محدد تعيّن صنفك!");
     setIsBallInHand(false);
-    setCalledPocketId(0);
     firstBallHitInShotRef.current = null;
     pottedInCurrentShotRef.current = [];
     cueScratchedInShotRef.current = false;
   };
 
-  useEffect(() => {
-    initBalls(mode);
-  }, [mode]);
-
   // Handle Game Over
-  const triggerGameOver = (winner: 'human' | 'bot', message: string) => {
+  const triggerGameOver = (winner: "human" | "bot", message: string) => {
     setGameOver(message);
-    if (winner === 'human') {
-      setCoins(c => c + prize);
+    if (winner === "human") {
+      const perkBonus = activeCue.id === "cue_royal_ruby" ? Math.round(prize * 1.15) : prize;
+      saveCoins(coins + perkBonus);
+      if (soundEnabled) playSuccessChime();
     }
-    if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+    if (typeof window !== "undefined" && window.parent && window.parent !== window) {
       window.parent.postMessage({
-        type: 'GAME_OVER',
-        game: 'billiards',
+        type: "GAME_OVER",
+        game: "billiards",
         winner,
-        coins: winner === 'human' ? prize : 0,
-        isHuman: winner === 'human'
-      }, '*');
+        coins: winner === "human" ? prize : 0,
+        isHuman: winner === "human",
+      }, "*");
     }
   };
 
   const handleCloseToParent = () => {
-    if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'CLOSE_GAME' }, '*');
+    if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "CLOSE_GAME" }, "*");
     }
   };
 
-  // Ball in Hand placement validation
-  const isValidPlacement = (x: number, y: number) => {
-    const minX = CUSHION + BALL_RADIUS + 5;
-    const maxX = TABLE_WIDTH - CUSHION - BALL_RADIUS - 5;
-    const minY = CUSHION + BALL_RADIUS + 5;
-    const maxY = TABLE_HEIGHT - CUSHION - BALL_RADIUS - 5;
-    if (x < minX || x > maxX || y < minY || y > maxY) return false;
-
-    for (const b of ballsRef.current) {
-      if (b.type === 'cue' || b.isPotted) continue;
-      if (Math.hypot(b.x - x, b.y - y) < BALL_RADIUS * 2.2) return false;
-    }
-    return true;
-  };
-
-  const handlePlaceCueBall = (x: number, y: number) => {
-    if (!isValidPlacement(x, y)) return;
-    const cueBall = ballsRef.current[0];
-    if (cueBall) {
-      cueBall.x = x;
-      cueBall.y = y;
-      cueBall.vx = 0;
-      cueBall.vy = 0;
-      cueBall.isPotted = false;
-    }
-    setIsBallInHand(false);
-    setBallInHandHoverPos(null);
-    if (soundEnabled) playBallClack(8);
-    setTurnMessage('✅ تم وضع الكرة بنجاح! حان وقت التصويب والضرب.');
-  };
-
+  // Re-spot illegally potted ball onto foot spot
   const respotBall = (ball: Ball) => {
+    const tableLeft = CUSHION;
     const tableRight = TABLE_WIDTH - CUSHION;
-    const footSpotX = CUSHION + (tableRight - CUSHION) * 0.72;
+    const footSpotX = tableLeft + (tableRight - tableLeft) * 0.72;
     const footSpotY = TABLE_HEIGHT / 2;
 
     let targetX = footSpotX;
     let targetY = footSpotY;
 
-    while (ballsRef.current.some(b => !b.isPotted && Math.hypot(b.x - targetX, b.y - targetY) < BALL_RADIUS * 2.1)) {
+    while (ballsRef.current.some((b) => !b.isPotted && Math.hypot(b.x - targetX, b.y - targetY) < BALL_RADIUS * 2.1)) {
       targetX += BALL_RADIUS * 2.2;
       if (targetX > tableRight - BALL_RADIUS - 5) {
         targetX = footSpotX;
@@ -446,16 +493,73 @@ function CueMasterApp() {
     ball.vy = 0;
   };
 
+  // Shop Purchasing & Equipping Logic
+  const handleEquipCue = (cueId: string) => {
+    setSelectedCue(cueId);
+    try { localStorage.setItem("cuemaster_selected_cue", cueId); } catch {}
+    if (soundEnabled) playSuccessChime();
+  };
+
+  const handleBuyCue = (cue: CueItem) => {
+    if (unlockedCues.includes(cue.id)) {
+      handleEquipCue(cue.id);
+      return;
+    }
+    if (coins < cue.price) {
+      alert("❌ رصيدك من الكوينز غير كافٍ! العب مباريات أو اضغط (+) لزيادة الكوينز.");
+      return;
+    }
+    const newCoins = coins - cue.price;
+    const newUnlocked = [...unlockedCues, cue.id];
+    saveCoins(newCoins);
+    setUnlockedCues(newUnlocked);
+    setSelectedCue(cue.id);
+    try {
+      localStorage.setItem("cuemaster_unlocked_cues", JSON.stringify(newUnlocked));
+      localStorage.setItem("cuemaster_selected_cue", cue.id);
+    } catch {}
+    if (soundEnabled) playSuccessChime();
+  };
+
+  const handleEquipTable = (tableId: string) => {
+    setSelectedTable(tableId);
+    try { localStorage.setItem("cuemaster_selected_table", tableId); } catch {}
+    if (soundEnabled) playSuccessChime();
+  };
+
+  const handleBuyTable = (tbl: TableItem) => {
+    if (unlockedTables.includes(tbl.id)) {
+      handleEquipTable(tbl.id);
+      return;
+    }
+    if (coins < tbl.price) {
+      alert("❌ رصيدك من الكوينز غير كافٍ لشراء هذه الطاولة!");
+      return;
+    }
+    const newCoins = coins - tbl.price;
+    const newUnlocked = [...unlockedTables, tbl.id];
+    saveCoins(newCoins);
+    setUnlockedTables(newUnlocked);
+    setSelectedTable(tbl.id);
+    try {
+      localStorage.setItem("cuemaster_unlocked_tables", JSON.stringify(newUnlocked));
+      localStorage.setItem("cuemaster_selected_table", tbl.id);
+    } catch {}
+    if (soundEnabled) playSuccessChime();
+  };
+
   // Physics Engine & Renderer Loop
   useEffect(() => {
-    if (currentView !== 'table') return;
+    if (currentView !== "table") return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const FRICTION = 0.985;
+    const tableCfg = ALL_TABLES.find((t) => t.id === selectedTable) || ALL_TABLES[0];
+    const FRICTION = tableCfg.friction;
+    const CUSHION_BOUNCE = tableCfg.bounceRestitution;
     const POCKET_RADIUS = 24;
     const MAX_SPEED = 28;
 
@@ -488,17 +592,17 @@ function CueMasterApp() {
           anyMoving = true;
         }
 
-        // Cushion Bounces
+        // Cushion Bounces with custom table restitution
         const minX = CUSHION + ball.radius;
         const maxX = TABLE_WIDTH - CUSHION - ball.radius;
         const minY = CUSHION + ball.radius;
         const maxY = TABLE_HEIGHT - CUSHION - ball.radius;
 
         const speed = Math.hypot(ball.vx, ball.vy);
-        if (ball.x < minX) { ball.x = minX; ball.vx = -ball.vx * 0.85; if (soundEnabled && speed > 1) playBallClack(speed); }
-        if (ball.x > maxX) { ball.x = maxX; ball.vx = -ball.vx * 0.85; if (soundEnabled && speed > 1) playBallClack(speed); }
-        if (ball.y < minY) { ball.y = minY; ball.vy = -ball.vy * 0.85; if (soundEnabled && speed > 1) playBallClack(speed); }
-        if (ball.y > maxY) { ball.y = maxY; ball.vy = -ball.vy * 0.85; if (soundEnabled && speed > 1) playBallClack(speed); }
+        if (ball.x < minX) { ball.x = minX; ball.vx = -ball.vx * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
+        if (ball.x > maxX) { ball.x = maxX; ball.vx = -ball.vx * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
+        if (ball.y < minY) { ball.y = minY; ball.vy = -ball.vy * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
+        if (ball.y > maxY) { ball.y = maxY; ball.vy = -ball.vy * CUSHION_BOUNCE; if (soundEnabled && speed > 1) playBallClack(speed); }
 
         // Pocket Detection
         pockets.forEach((p) => {
@@ -509,7 +613,7 @@ function CueMasterApp() {
             ball.vy = 0;
             if (soundEnabled) playPocketDrop();
 
-            if (ball.type === 'cue') {
+            if (ball.type === "cue") {
               cueScratchedInShotRef.current = true;
             } else {
               pottedInCurrentShotRef.current.push({ ball, pocketId: p.id });
@@ -518,14 +622,17 @@ function CueMasterApp() {
         });
       });
 
-      // 2. Mathematically Correct 2D Elastic Rigid-Body Collisions
+      // 2. Ball-to-Ball Elastic Collisions (Rigid Body with Proper Momentum Conservation)
+      const cueActive = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
+      const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
+
       for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
           const b1 = balls[i];
           const b2 = balls[j];
           if (b1.isPotted || b2.isPotted) continue;
 
-          const dx = b2.x - b1.x; // Vector pointing from b1 to b2
+          const dx = b2.x - b1.x;
           const dy = b2.y - b1.y;
           const dist = Math.hypot(dx, dy);
           const minDist = b1.radius + b2.radius;
@@ -534,7 +641,7 @@ function CueMasterApp() {
             const nx = dx / dist;
             const ny = dy / dist;
 
-            // Positional separation to prevent balls sticking/clumping
+            // Positional separation to prevent balls sticking
             const overlap = minDist - dist;
             b1.x -= nx * overlap * 0.5;
             b1.y -= ny * overlap * 0.5;
@@ -544,10 +651,9 @@ function CueMasterApp() {
             // Relative velocity along collision normal (b1 relative to b2)
             const relVelNormal = (b1.vx - b2.vx) * nx + (b1.vy - b2.vy) * ny;
 
-            // ONLY apply impulse if balls are moving towards each other!
-            // (Prevents free energy creation, endless rolling, or direction inversion!)
+            // ONLY apply impulse if balls are approaching
             if (relVelNormal > 0) {
-              const restitution = 0.94; // Elastic restitution of Aramith phenolic balls
+              const restitution = 0.94;
               const impulse = ((1 + restitution) * relVelNormal) / 2;
 
               b1.vx -= impulse * nx;
@@ -563,34 +669,34 @@ function CueMasterApp() {
             }
 
             // Track First Ball Hit by Cue Ball
-            if (b1.type === 'cue' || b2.type === 'cue') {
-              const targetB = b1.type === 'cue' ? b2 : b1;
-              const cueB = b1.type === 'cue' ? b1 : b2;
+            if (b1.type === "cue" || b2.type === "cue") {
+              const targetB = b1.type === "cue" ? b2 : b1;
+              const cueB = b1.type === "cue" ? b1 : b2;
 
               if (!firstBallHitInShotRef.current) {
                 firstBallHitInShotRef.current = targetB;
               }
 
-              // Apply Spin Impulse ONCE per shot along aim angle axis
+              // Apply Spin Impulse ONCE per shot with cue spin multiplier
               if (!spinAppliedInCurrentShotRef.current) {
                 spinAppliedInCurrentShotRef.current = true;
                 const cosAim = Math.cos(activeShotAimAngleRef.current);
                 const sinAim = Math.sin(activeShotAimAngleRef.current);
 
                 if (spinY < -0.15) {
-                  // Backspin / Screw (اسكروه): Pulls cue ball BACKWARDS along aim line
-                  const screwMag = Math.abs(spinY) * 5.2;
+                  // Backspin / Screw (اسكروه)
+                  const screwMag = Math.abs(spinY) * 5.2 * cueSpinBonus;
                   cueB.vx -= cosAim * screwMag;
                   cueB.vy -= sinAim * screwMag;
                 } else if (spinY > 0.15) {
-                  // Topspin / Follow (توب سبن): Drives cue ball FORWARD along aim line
-                  const followMag = spinY * 4.0;
+                  // Topspin / Follow (توب سبن)
+                  const followMag = spinY * 4.0 * cueSpinBonus;
                   cueB.vx += cosAim * followMag;
                   cueB.vy += sinAim * followMag;
                 }
                 if (Math.abs(spinX) > 0.15) {
-                  // Side English: Deflects perpendicular to aim line
-                  const sideMag = spinX * 2.8;
+                  // Side English
+                  const sideMag = spinX * 2.8 * cueSpinBonus;
                   cueB.vx += -sinAim * sideMag;
                   cueB.vy += cosAim * sideMag;
                 }
@@ -608,70 +714,70 @@ function CueMasterApp() {
         const cueScratched = cueScratchedInShotRef.current;
         const firstHit = firstBallHitInShotRef.current;
         const activeShooter = turn;
-        const targetPocketForThisShot = activeShotCalledPocketRef.current; // The pocket called when shot was fired!
+        const targetPocketForThisShot = activeShotCalledPocketRef.current;
 
         pottedInCurrentShotRef.current = [];
         cueScratchedInShotRef.current = false;
         firstBallHitInShotRef.current = null;
 
-        if (mode === '8-ball') {
-          const shooterGroup = activeShooter === 'human' ? humanGroup : botGroup;
-          const remainingTargetBalls = ballsRef.current.filter(b => 
-            !b.isPotted && b.number !== 8 && (shooterGroup === 'solids' ? b.type === 'solid' : b.type === 'stripe')
+        if (mode === "8-ball") {
+          const shooterGroup = activeShooter === "human" ? humanGroup : botGroup;
+          const remainingTargetBalls = ballsRef.current.filter((b) =>
+            !b.isPotted && b.number !== 8 && (shooterGroup === "solids" ? b.type === "solid" : b.type === "stripe")
           );
 
           // CHECK RULE: 8-Ball Potting
-          const black8Entry = pottedList.find(item => item.ball.number === 8);
+          const black8Entry = pottedList.find((item) => item.ball.number === 8);
           if (black8Entry) {
             if (cueScratched) {
-              if (activeShooter === 'human') triggerGameOver('bot', '❌ خسرت المباراة! أسقطت الكرة البيضاء مع الكرة السوداء رقم 8.');
-              else triggerGameOver('human', '🎉 مبروك الفوز! الخصم أسقط الكرة البيضاء مع الكرة السوداء رقم 8.');
+              if (activeShooter === "human") triggerGameOver("bot", "❌ خسرت المباراة! أسقطت الكرة البيضاء مع الكرة السوداء رقم 8.");
+              else triggerGameOver("human", "🎉 مبروك الفوز! الخصم أسقط الكرة البيضاء مع الكرة السوداء رقم 8.");
               return;
             }
 
-            if (remainingTargetBalls.length > 0 || shooterGroup === 'unassigned') {
-              if (activeShooter === 'human') triggerGameOver('bot', '❌ خسرت المباراة! أسقطت الكرة السوداء رقم 8 قبل تصفية جميع كراتك.');
-              else triggerGameOver('human', '🎉 مبروك الفوز! الخصم أسقط الكرة السوداء رقم 8 قبل تصفية كراته.');
+            if (remainingTargetBalls.length > 0 || shooterGroup === "unassigned") {
+              if (activeShooter === "human") triggerGameOver("bot", "❌ خسرت المباراة! أسقطت الكرة السوداء رقم 8 قبل تصفية جميع كراتك.");
+              else triggerGameOver("human", "🎉 مبروك الفوز! الخصم أسقط الكرة السوداء رقم 8 قبل تصفية كراته.");
               return;
             }
 
             if (targetPocketForThisShot !== null && black8Entry.pocketId !== targetPocketForThisShot) {
-              if (activeShooter === 'human') triggerGameOver('bot', '❌ خسرت المباراة! الكرة السوداء 8 سقطت في جيب غير الجيب المحدد.');
-              else triggerGameOver('human', '🎉 مبروك الفوز! الخصم أسقط الكرة السوداء 8 في جيب غير الجيب المحدد.');
+              if (activeShooter === "human") triggerGameOver("bot", "❌ خسرت المباراة! الكرة السوداء 8 سقطت في جيب غير الجيب المحدد.");
+              else triggerGameOver("human", "🎉 مبروك الفوز! الخصم أسقط الكرة السوداء 8 في جيب غير الجيب المحدد.");
               return;
             }
 
-            if (activeShooter === 'human') triggerGameOver('human', '🏆 مبروك الفوز الساحق! أحرزت الكرة السوداء رقم 8 في الجيب المحدد بعد تصفية كراتك!');
-            else triggerGameOver('bot', 'خسرت المباراة! الخصم أحرز الكرة السوداء رقم 8 وفاز بالجولة.');
+            if (activeShooter === "human") triggerGameOver("human", "🏆 مبروك الفوز الساحق! أحرزت الكرة السوداء رقم 8 في الجيب المحدد بعد تصفية كراتك!");
+            else triggerGameOver("bot", "خسرت المباراة! الخصم أحرز الكرة السوداء رقم 8 وفاز بالجولة.");
             return;
           }
 
           // CHECK FOUL RULES:
           let foulOccurred = false;
-          let foulReason = '';
+          let foulReason = "";
 
           if (cueScratched) {
             foulOccurred = true;
-            foulReason = 'سقوط الكرة البيضاء في الجيب (Scratch).';
+            foulReason = "سقوط الكرة البيضاء في الجيب (Scratch).";
           } else if (!firstHit) {
             foulOccurred = true;
-            foulReason = 'الكرة البيضاء لم تلمس أي كرة على الإطلاق!';
-          } else if (shooterGroup === 'unassigned' && firstHit.number === 8) {
+            foulReason = "الكرة البيضاء لم تلمس أي كرة على الإطلاق!";
+          } else if (shooterGroup === "unassigned" && firstHit.number === 8) {
             foulOccurred = true;
-            foulReason = 'الطاولة مفتوحة: لا يجوز لمس الكرة السوداء رقم 8 أولاً!';
-          } else if (shooterGroup !== 'unassigned') {
+            foulReason = "الطاولة مفتوحة: لا يجوز لمس الكرة السوداء رقم 8 أولاً!";
+          } else if (shooterGroup !== "unassigned") {
             if (remainingTargetBalls.length > 0) {
-              const expectedType = shooterGroup === 'solids' ? 'solid' : 'stripe';
+              const expectedType = shooterGroup === "solids" ? "solid" : "stripe";
               if (firstHit.type !== expectedType) {
                 foulOccurred = true;
-                foulReason = firstHit.number === 8 
-                  ? 'لمست الكرة السوداء رقم 8 أولاً قبل تصفية كراتك!' 
-                  : (shooterGroup === 'solids' ? 'لمست كرة (ألوان/مخطط) وصنفك هو سادة!' : 'لمست كرة (سادة) وصنفك هو ألوان/مخطط!');
+                foulReason = firstHit.number === 8
+                  ? "لمست الكرة السوداء رقم 8 أولاً قبل تصفية كراتك!"
+                  : (shooterGroup === "solids" ? "لمست كرة (ألوان/مخطط) وصنفك هو سادة!" : "لمست كرة (سادة) وصنفك هو ألوان/مخطط!");
               }
             } else {
               if (firstHit.number !== 8) {
                 foulOccurred = true;
-                foulReason = 'أنهيت كراتك، يجب لمس الكرة السوداء رقم 8 أولاً!';
+                foulReason = "أنهيت كراتك، يجب لمس الكرة السوداء رقم 8 أولاً!";
               }
             }
           }
@@ -679,9 +785,9 @@ function CueMasterApp() {
           if (foulOccurred) {
             if (soundEnabled) playFoulBuzzer();
             if (!isPractice) {
-              const nextTurn = activeShooter === 'human' ? 'bot' : 'human';
+              const nextTurn = activeShooter === "human" ? "bot" : "human";
               setTurn(nextTurn);
-              if (nextTurn === 'human') {
+              if (nextTurn === "human") {
                 setIsBallInHand(true);
                 setTurnMessage(`✋ خطأ على الخصم: (${foulReason}) الكرة في يدك الآن!`);
               } else {
@@ -704,7 +810,7 @@ function CueMasterApp() {
             return;
           }
 
-          // CHECK CALL POCKET RULE (Requirement 2 & 3: Evaluated against snapshot targetPocketForThisShot)
+          // CHECK CALL POCKET RULE
           const legallyCalledPots: Ball[] = [];
           const wrongPocketPots: Ball[] = [];
 
@@ -718,77 +824,76 @@ function CueMasterApp() {
           });
 
           if (wrongPocketPots.length > 0) {
-            setTurnMessage(`⚠️ كرة سقطت في جيب غير محدد (${wrongPocketPots.map(b => b.number).join(',')})! تم إرجاعها للطاولة.`);
+            setTurnMessage(`⚠️ كرة سقطت في جيب غير محدد (${wrongPocketPots.map((b) => b.number).join(",")})! تم إرجاعها للطاولة.`);
           }
 
           // ASSIGN GROUPS: First legal pot determines Solids (سادة) vs Stripes (ألوان)
-          if (humanGroup === 'unassigned' && legallyCalledPots.length > 0) {
-            const firstLegal = legallyCalledPots.find(b => b.type === 'solid' || b.type === 'stripe');
+          if (humanGroup === "unassigned" && legallyCalledPots.length > 0) {
+            const firstLegal = legallyCalledPots.find((b) => b.type === "solid" || b.type === "stripe");
             if (firstLegal) {
-              const isSolid = firstLegal.type === 'solid';
-              if (activeShooter === 'human') {
-                setHumanGroup(isSolid ? 'solids' : 'stripes');
-                setBotGroup(isSolid ? 'stripes' : 'solids');
+              const isSolid = firstLegal.type === "solid";
+              if (activeShooter === "human") {
+                setHumanGroup(isSolid ? "solids" : "stripes");
+                setBotGroup(isSolid ? "stripes" : "solids");
                 setGroupAnnouncement({
-                  title: '🎉 أحرزت أول كرة بنجاح وتم تحديد الأصناف!',
-                  human: isSolid ? 'سادة (Solids 1-7) 🟡🔴' : 'ألوان (Stripes 9-15) 🔵⚪',
-                  bot: isSolid ? 'ألوان (Stripes 9-15) 🔵⚪' : 'سادة (Solids 1-7) 🟡🔴'
+                  title: "🎉 أحرزت أول كرة بنجاح وتم تحديد الأصناف!",
+                  human: isSolid ? "سادة (Solids 1-7) 🟡🔴" : "ألوان (Stripes 9-15) 🔵⚪",
+                  bot: isSolid ? "ألوان (Stripes 9-15) 🔵⚪" : "سادة (Solids 1-7) 🟡🔴",
                 });
-                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? 'سادة 🟡 (1-7)' : 'ألوان 🔵 (9-15)'}]!`);
+                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)"}]!`);
               } else {
-                setBotGroup(isSolid ? 'solids' : 'stripes');
-                setHumanGroup(isSolid ? 'stripes' : 'solids');
+                setBotGroup(isSolid ? "solids" : "stripes");
+                setHumanGroup(isSolid ? "stripes" : "solids");
                 setGroupAnnouncement({
-                  title: '🤖 الخصم أحرز أول كرة وتم تحديد الأصناف!',
-                  human: isSolid ? 'ألوان (Stripes 9-15) 🔵⚪' : 'سادة (Solids 1-7) 🟡🔴',
-                  bot: isSolid ? 'سادة (Solids 1-7) 🟡🔴' : 'ألوان (Stripes 9-15) 🔵⚪'
+                  title: "🤖 الخصم أحرز أول كرة وتم تحديد الأصناف!",
+                  human: isSolid ? "ألوان (Stripes 9-15) 🔵⚪" : "سادة (Solids 1-7) 🟡🔴",
+                  bot: isSolid ? "سادة (Solids 1-7) 🟡🔴" : "ألوان (Stripes 9-15) 🔵⚪",
                 });
-                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? 'ألوان 🔵 (9-15)' : 'سادة 🟡 (1-7)'}]!`);
+                setTurnMessage(`🎱 كراتك أصبحت: [${isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)"}]!`);
               }
               setTimeout(() => setGroupAnnouncement(null), 4500);
             }
           }
 
-          // Check if Shooter keeps their turn! (Requirement 1: Finishing colors continues to 8-ball)
-          const currentShooterGroup = activeShooter === 'human' ? humanGroup : botGroup;
-          const pottedLegalBallInCalledPocket = legallyCalledPots.some(b => 
-            currentShooterGroup === 'unassigned'
-              ? (b.type === 'solid' || b.type === 'stripe')
-              : (currentShooterGroup === 'solids' ? b.type === 'solid' : b.type === 'stripe')
+          // Check if Shooter keeps their turn!
+          const currentShooterGroup = activeShooter === "human" ? humanGroup : botGroup;
+          const pottedLegalBallInCalledPocket = legallyCalledPots.some((b) =>
+            currentShooterGroup === "unassigned"
+              ? (b.type === "solid" || b.type === "stripe")
+              : (currentShooterGroup === "solids" ? b.type === "solid" : b.type === "stripe")
           );
 
           if (pottedLegalBallInCalledPocket) {
-            if (activeShooter === 'human') setHumanScore(s => s + legallyCalledPots.length);
-            else setBotScore(s => s + legallyCalledPots.length);
+            if (activeShooter === "human") setHumanScore((s) => s + legallyCalledPots.length);
+            else setBotScore((s) => s + legallyCalledPots.length);
 
-            // CHECK: Did the shooter just finish their last ball?!
-            const remainingForShooter = ballsRef.current.filter(b => 
-              !b.isPotted && b.number !== 8 && (currentShooterGroup === 'solids' ? b.type === 'solid' : b.type === 'stripe')
+            // Did the shooter just finish their last ball?!
+            const remainingForShooter = ballsRef.current.filter((b) =>
+              !b.isPotted && b.number !== 8 && (currentShooterGroup === "solids" ? b.type === "solid" : b.type === "stripe")
             );
 
-            if (remainingForShooter.length === 0 && currentShooterGroup !== 'unassigned') {
-              // Shooter cleared their entire group! Turn continues on the 8-Ball!
-              if (activeShooter === 'human') {
-                setTurn('human');
-                setTurnMessage('🏆 مبروك! أنهيت جميع كرات صنفك بنجاح! دورك مستمر الآن لإسقاط الكرة السوداء 8 في الجيب المحدد وإنهاء الجيم!');
+            if (remainingForShooter.length === 0 && currentShooterGroup !== "unassigned") {
+              if (activeShooter === "human") {
+                setTurn("human");
+                setTurnMessage("🏆 مبروك! أنهيت جميع كرات صنفك بنجاح! دورك مستمر الآن لإسقاط الكرة السوداء 8 في الجيب المحدد وإنهاء الجيم!");
               } else {
-                setTurn('bot');
-                setTurnMessage('⚠️ الخصم أنهى جميع كراته ودوره مستمر على الكرة السوداء رقم 8!');
+                setTurn("bot");
+                setTurnMessage("⚠️ الخصم أنهى جميع كراته ودوره مستمر على الكرة السوداء رقم 8!");
               }
             } else {
-              setTurnMessage('🔥 ضربة صحيحة في الجيب المحدد! دورك مستمر للضربة التالية!');
+              setTurnMessage("🔥 ضربة صحيحة في الجيب المحدد! دورك مستمر للضربة التالية!");
             }
           } else {
             if (!isPractice) {
-              setTurn(activeShooter === 'human' ? 'bot' : 'human');
-              setTurnMessage(activeShooter === 'human' ? 'دور الخصم الآن...' : 'دورك الآن! تأكد من لمس صنفك أولاً.');
+              setTurn(activeShooter === "human" ? "bot" : "human");
+              setTurnMessage(activeShooter === "human" ? "دور الخصم الآن..." : "دورك الآن! تأكد من لمس صنفك أولاً.");
             }
           }
 
         } else {
           // Snooker Logic
           if (cueScratched) {
-            if (!isPractice) setTurn(activeShooter === 'human' ? 'bot' : 'human');
+            if (!isPractice) setTurn(activeShooter === "human" ? "bot" : "human");
             const cb = ballsRef.current[0];
             if (cb) {
               cb.x = CUSHION + 150;
@@ -798,10 +903,10 @@ function CueMasterApp() {
           } else {
             const totalPoints = pottedList.reduce((acc, item) => acc + (item.ball.value || 1), 0);
             if (totalPoints > 0) {
-              if (activeShooter === 'human') setHumanScore(s => s + totalPoints);
-              else setBotScore(s => s + totalPoints);
+              if (activeShooter === "human") setHumanScore((s) => s + totalPoints);
+              else setBotScore((s) => s + totalPoints);
             } else {
-              if (!isPractice) setTurn(activeShooter === 'human' ? 'bot' : 'human');
+              if (!isPractice) setTurn(activeShooter === "human" ? "bot" : "human");
             }
           }
         }
@@ -811,36 +916,33 @@ function CueMasterApp() {
     const render = () => {
       ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
 
-      // 1. Wood Frame
-      ctx.fillStyle = '#1c100b';
-      ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
-      ctx.strokeStyle = '#b45309';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(8, 8, TABLE_WIDTH - 16, TABLE_HEIGHT - 16);
+      // 1. Table Background & Cushion Rendering
+      const tableImg = tableCfg.image ? tableImageCacheRef.current[tableCfg.id] : null;
 
-      // 2. Cloth Felt
-      const feltGradient = ctx.createRadialGradient(
-        TABLE_WIDTH / 2, TABLE_HEIGHT / 2, 80,
-        TABLE_WIDTH / 2, TABLE_HEIGHT / 2, 450
-      );
-
-      if (feltColor === 'blue') {
-        feltGradient.addColorStop(0, '#1e40af');
-        feltGradient.addColorStop(1, '#172554');
-      } else if (feltColor === 'snooker' || mode === 'snooker') {
-        feltGradient.addColorStop(0, '#047857');
-        feltGradient.addColorStop(1, '#064e3b');
+      if (tableImg && tableImg.complete && tableImg.naturalWidth > 0) {
+        ctx.drawImage(tableImg, 0, 0, TABLE_WIDTH, TABLE_HEIGHT);
       } else {
-        feltGradient.addColorStop(0, '#15803d');
-        feltGradient.addColorStop(1, '#052e16');
+        // Procedural Table Frame & Felt
+        ctx.fillStyle = "#1c100b";
+        ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+        ctx.strokeStyle = tableCfg.cushionGlow;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(8, 8, TABLE_WIDTH - 16, TABLE_HEIGHT - 16);
+
+        const feltGradient = ctx.createRadialGradient(
+          TABLE_WIDTH / 2, TABLE_HEIGHT / 2, 80,
+          TABLE_WIDTH / 2, TABLE_HEIGHT / 2, 450
+        );
+        feltGradient.addColorStop(0, tableCfg.feltColor);
+        feltGradient.addColorStop(1, "#021c10");
+
+        ctx.fillStyle = feltGradient;
+        ctx.fillRect(CUSHION, CUSHION, TABLE_WIDTH - 2 * CUSHION, TABLE_HEIGHT - 2 * CUSHION);
       }
 
-      ctx.fillStyle = feltGradient;
-      ctx.fillRect(CUSHION, CUSHION, TABLE_WIDTH - 2 * CUSHION, TABLE_HEIGHT - 2 * CUSHION);
-
       // Snooker Baulk Line & "D" Zone
-      if (mode === 'snooker') {
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      if (mode === "snooker") {
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
         ctx.lineWidth = 2;
         const baulkX = CUSHION + 150;
         ctx.beginPath();
@@ -853,180 +955,184 @@ function CueMasterApp() {
         ctx.stroke();
       }
 
-      // 3. Pockets & Target Call Pocket Highlight
+      // 2. Pockets & Target Call Pocket Highlight
       pockets.forEach((p) => {
         const isTarget = calledPocketId === p.id;
 
-        ctx.fillStyle = '#05070a';
+        ctx.fillStyle = "rgba(2, 6, 12, 0.85)";
         ctx.beginPath();
         ctx.arc(p.x, p.y, POCKET_RADIUS, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = isTarget ? '#eab308' : '#475569';
-        ctx.lineWidth = isTarget ? 3.5 : 2;
+        ctx.strokeStyle = isTarget ? "#eab308" : tableCfg.cushionGlow;
+        ctx.lineWidth = isTarget ? 3.5 : 1.5;
         ctx.stroke();
 
         if (isTarget) {
-          ctx.strokeStyle = 'rgba(234, 179, 8, 0.9)';
+          ctx.strokeStyle = "rgba(234, 179, 8, 0.9)";
           ctx.setLineDash([4, 4]);
           ctx.beginPath();
           ctx.arc(p.x, p.y, POCKET_RADIUS + 8, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
 
-          ctx.fillStyle = '#eab308';
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText('🎯 الهدف', p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 36 : -30));
+          ctx.fillStyle = "#eab308";
+          ctx.font = "bold 10px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 36 : -30));
         }
       });
 
-      // 4. Balls (Accurate Solids & Stripes Rendering)
+      // 3. Balls (Accurate Solids & Stripes Rendering)
       const balls = ballsRef.current;
       balls.forEach((ball) => {
         if (ball.isPotted) return;
 
         // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.beginPath();
-        ctx.arc(ball.x + 3, ball.y + 4, ball.radius, 0, Math.PI * 2);
+        ctx.arc(ball.x + 2, ball.y + 3, ball.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        if (ball.type === 'stripe') {
-          ctx.fillStyle = '#f8fafc';
-          ctx.beginPath();
-          ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-          ctx.clip();
-          ctx.fillStyle = ball.color;
-          ctx.fillRect(ball.x - ball.radius, ball.y - ball.radius * 0.52, ball.radius * 2, ball.radius * 1.04);
-          ctx.restore();
-        } else {
-          ctx.fillStyle = ball.color;
-          ctx.beginPath();
-          ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Highlight sheen
-        const grad = ctx.createRadialGradient(
-          ball.x - 3, ball.y - 3, 1,
-          ball.x, ball.y, ball.radius
-        );
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
-        grad.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
-        ctx.fillStyle = grad;
+        // Base Sphere
+        ctx.fillStyle = ball.color;
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Number Circle for 8-ball
-        if (mode === '8-ball' && ball.number > 0) {
-          ctx.fillStyle = '#ffffff';
+        // Stripes (White Band)
+        if (ball.type === "stripe") {
+          ctx.fillStyle = "#ffffff";
           ctx.beginPath();
-          ctx.arc(ball.x, ball.y, ball.radius * 0.44, 0, Math.PI * 2);
+          ctx.arc(ball.x, ball.y, ball.radius - 3, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.fillStyle = '#000000';
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(ball.number.toString(), ball.x, ball.y + 0.5);
+          ctx.fillStyle = ball.color;
+          ctx.beginPath();
+          ctx.ellipse(ball.x, ball.y, ball.radius - 3, (ball.radius - 3) * 0.45, 0, 0, Math.PI * 2);
+          ctx.fill();
         }
+
+        // White Center Circle & Number for Solids & Stripes
+        if (ball.type === "solid" || ball.type === "stripe" || ball.type === "black") {
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, ball.radius * 0.42, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#0f172a";
+          ctx.font = `bold ${ball.number >= 10 ? "8px" : "9px"} sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(ball.number.toString(), ball.x, ball.y);
+        }
+
+        // White Cue Ball Spin Impact Dot Indicator
+        if (ball.type === "cue" && (Math.abs(spinX) > 0.05 || Math.abs(spinY) > 0.05)) {
+          ctx.fillStyle = "#ef4444";
+          ctx.beginPath();
+          ctx.arc(ball.x + spinX * 7, ball.y + spinY * 7, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Sphere Gloss / Specular Highlight
+        const glossGrad = ctx.createRadialGradient(
+          ball.x - ball.radius * 0.35, ball.y - ball.radius * 0.35, 1,
+          ball.x, ball.y, ball.radius
+        );
+        glossGrad.addColorStop(0, "rgba(255,255,255,0.7)");
+        glossGrad.addColorStop(0.4, "rgba(255,255,255,0.1)");
+        glossGrad.addColorStop(1, "rgba(0,0,0,0.35)");
+        ctx.fillStyle = glossGrad;
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fill();
       });
 
-      // 5. Ball-in-Hand Gloved Preview
+      // 4. Ball in Hand Placement Guide & Hand Glove Icon
       if (isBallInHand && ballInHandHoverPos) {
-        const isValid = isValidPlacement(ballInHandHoverPos.x, ballInHandHoverPos.y);
-        ctx.fillStyle = isValid ? 'rgba(255, 255, 255, 0.75)' : 'rgba(239, 68, 68, 0.6)';
+        ctx.fillStyle = "rgba(59, 130, 246, 0.35)";
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, BALL_RADIUS + 2, 0, Math.PI * 2);
         ctx.fill();
-
-        ctx.strokeStyle = isValid ? '#10b981' : '#ef4444';
-        ctx.lineWidth = 2.5;
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        ctx.font = '16px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('🧤', ballInHandHoverPos.x, ballInHandHoverPos.y - 18);
+        ctx.font = "24px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("🧤", ballInHandHoverPos.x + 14, ballInHandHoverPos.y - 12);
       }
 
-      // 6. AIM LINE RAYCASTING & LEGAL TARGET VALIDATION
+      // 5. AIM LINE RAYCASTING & LEGAL TARGET VALIDATION (Scaled with Cue Aim Stat)
       const cueBall = balls[0];
-      if ((turn === 'human' || isPractice) && !isShooting && !isBallInHand && cueBall && !cueBall.isPotted) {
+      if ((turn === "human" || isPractice) && !isShooting && !isBallInHand && cueBall && !cueBall.isPotted) {
         const cosA = Math.cos(aimAngle);
         const sinA = Math.sin(aimAngle);
         const collisionRadius = BALL_RADIUS * 2;
 
-        let closestHitDist = aimAssistLong ? 550 : 320;
+        const baseDist = aimAssistLong ? 420 : 260;
+        const cueBonusDist = (activeCue.stats.aim / 10) * 280;
+        let closestHitDist = baseDist + cueBonusDist;
+
         let hitBall: Ball | null = null;
-        let ghostBallPos: { x: number; y: number } | null = null;
-        let targetDeflectDir: { dx: number; dy: number } | null = null;
+        let ghostBallPos = { x: 0, y: 0 };
+        let targetDeflectDir = { dx: 0, dy: 0 };
 
-        // Clip to cushions
-        const leftDist = cosA < 0 ? (CUSHION + BALL_RADIUS - cueBall.x) / cosA : 9999;
-        const rightDist = cosA > 0 ? (TABLE_WIDTH - CUSHION - BALL_RADIUS - cueBall.x) / cosA : 9999;
-        const topDist = sinA < 0 ? (CUSHION + BALL_RADIUS - cueBall.y) / sinA : 9999;
-        const bottomDist = sinA > 0 ? (TABLE_HEIGHT - CUSHION - BALL_RADIUS - cueBall.y) / sinA : 9999;
-        closestHitDist = Math.min(closestHitDist, Math.max(0, Math.min(leftDist, rightDist, topDist, bottomDist)));
-
-        // Ray-Circle intersection with each ball
         for (let i = 1; i < balls.length; i++) {
           const b = balls[i];
           if (b.isPotted) continue;
 
-          const vx = b.x - cueBall.x;
-          const vy = b.y - cueBall.y;
-          const proj = vx * cosA + vy * sinA;
-          if (proj <= 0) continue;
+          const toBx = b.x - cueBall.x;
+          const toBy = b.y - cueBall.y;
+          const projDist = toBx * cosA + toBy * sinA;
 
-          const perpSq = (vx * vx + vy * vy) - (proj * proj);
-          if (perpSq >= 0 && perpSq < collisionRadius * collisionRadius) {
-            const d = proj - Math.sqrt(collisionRadius * collisionRadius - perpSq);
-            if (d > 0 && d < closestHitDist) {
-              closestHitDist = d;
-              hitBall = b;
-              const gx = cueBall.x + cosA * d;
-              const gy = cueBall.y + sinA * d;
-              ghostBallPos = { x: gx, y: gy };
-              const nLen = Math.hypot(b.x - gx, b.y - gy) || 1;
-              targetDeflectDir = { dx: (b.x - gx) / nLen, dy: (b.y - gy) / nLen };
+          if (projDist > 0 && projDist < closestHitDist) {
+            const perpDistSq = (toBx * toBx + toBy * toBy) - (projDist * projDist);
+            if (perpDistSq < collisionRadius * collisionRadius && perpDistSq >= 0) {
+              const d = Math.sqrt(collisionRadius * collisionRadius - perpDistSq);
+              const actualHitDist = projDist - d;
+              if (actualHitDist < closestHitDist && actualHitDist > 0) {
+                closestHitDist = actualHitDist;
+                hitBall = b;
+                ghostBallPos = {
+                  x: cueBall.x + cosA * actualHitDist,
+                  y: cueBall.y + sinA * actualHitDist,
+                };
+                const normDx = b.x - ghostBallPos.x;
+                const normDy = b.y - ghostBallPos.y;
+                const normLen = Math.hypot(normDx, normDy) || 1;
+                targetDeflectDir = { dx: normDx / normLen, dy: normDy / normLen };
+              }
             }
           }
         }
 
-        // Check if aimed hitBall is legal or illegal!
         let isAimedTargetLegal = true;
-        let warningText = '';
+        let warningText = "";
 
-        if (hitBall && mode === '8-ball') {
-          if (humanGroup === 'unassigned') {
+        if (hitBall && mode === "8-ball") {
+          if (humanGroup === "unassigned") {
             if (hitBall.number === 8) {
               isAimedTargetLegal = false;
-              warningText = '⚠️ فاول: لا تلمس 8 الآن!';
+              warningText = "⚠️ طاولة مفتوحة: لا يجوز ضرب 8!";
             }
           } else {
-            const remainingHumanBalls = balls.filter(b => 
-              !b.isPotted && b.number !== 8 && (humanGroup === 'solids' ? b.type === 'solid' : b.type === 'stripe')
+            const remainingHumanBalls = balls.filter((b) =>
+              !b.isPotted && b.number !== 8 && (humanGroup === "solids" ? b.type === "solid" : b.type === "stripe")
             );
             if (remainingHumanBalls.length > 0) {
-              const expectedType = humanGroup === 'solids' ? 'solid' : 'stripe';
+              const expectedType = humanGroup === "solids" ? "solid" : "stripe";
               if (hitBall.type !== expectedType) {
                 isAimedTargetLegal = false;
-                warningText = hitBall.number === 8 ? '⚠️ فاول: لا تلمس 8 الآن!' : '⚠️ فاول: صنف الخصم!';
+                warningText = hitBall.number === 8 ? "⚠️ فاول: لا تلمس 8 الآن!" : "⚠️ فاول: صنف الخصم!";
               }
             } else {
-              // Final ball is 8!
               if (hitBall.number !== 8) {
                 isAimedTargetLegal = false;
-                warningText = '⚠️ فاول: هدفك الكرة 8!';
+                warningText = "⚠️ فاول: هدفك الكرة 8!";
               }
             }
           }
@@ -1035,75 +1141,113 @@ function CueMasterApp() {
         const endAimX = cueBall.x + cosA * closestHitDist;
         const endAimY = cueBall.y + sinA * closestHitDist;
 
-        ctx.strokeStyle = isAimedTargetLegal ? 'rgba(255, 255, 255, 0.75)' : 'rgba(239, 68, 68, 0.9)';
+        // Custom Aim Line Style (Aura glow for Legendary Cues!)
+        const aimLineColor = !isAimedTargetLegal
+          ? "rgba(239, 68, 68, 0.95)"
+          : activeCue.category === "legendary"
+          ? activeCue.glowColor
+          : "rgba(255, 255, 255, 0.85)";
+
+        ctx.strokeStyle = aimLineColor;
         ctx.setLineDash([5, 5]);
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = activeCue.category === "legendary" ? 2.5 : 1.5;
+        if (activeCue.category === "legendary" && isAimedTargetLegal) {
+          ctx.shadowColor = activeCue.glowColor;
+          ctx.shadowBlur = 8;
+        }
         ctx.beginPath();
         ctx.moveTo(cueBall.x, cueBall.y);
         ctx.lineTo(endAimX, endAimY);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
 
-        // Ghost Ball & Target Ball Path
-        if (ghostBallPos && hitBall && targetDeflectDir) {
-          ctx.strokeStyle = isAimedTargetLegal ? 'rgba(255, 255, 255, 0.65)' : 'rgba(239, 68, 68, 0.85)';
+        if (hitBall) {
+          // Ghost Ball Outline
+          ctx.strokeStyle = isAimedTargetLegal ? "rgba(255, 255, 255, 0.7)" : "rgba(239, 68, 68, 0.8)";
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.arc(ghostBallPos.x, ghostBallPos.y, BALL_RADIUS, 0, Math.PI * 2);
           ctx.stroke();
 
-          // Target Ball Guide Line
-          ctx.strokeStyle = isAimedTargetLegal ? 'rgba(250, 204, 21, 0.85)' : 'rgba(239, 68, 68, 0.7)';
+          // Target Ball Deflection Guide Line
+          ctx.strokeStyle = isAimedTargetLegal ? (activeCue.category === "legendary" ? activeCue.glowColor : "#facc15") : "#ef4444";
           ctx.setLineDash([4, 4]);
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(hitBall.x, hitBall.y);
           ctx.lineTo(
-            hitBall.x + targetDeflectDir.dx * 130,
-            hitBall.y + targetDeflectDir.dy * 130
+            hitBall.x + targetDeflectDir.dx * (120 + (activeCue.stats.aim / 10) * 80),
+            hitBall.y + targetDeflectDir.dy * (120 + (activeCue.stats.aim / 10) * 80)
           );
           ctx.stroke();
           ctx.setLineDash([]);
 
-          ctx.fillStyle = isAimedTargetLegal ? 'rgba(250, 204, 21, 0.35)' : 'rgba(239, 68, 68, 0.4)';
+          ctx.fillStyle = isAimedTargetLegal ? "rgba(250, 204, 21, 0.35)" : "rgba(239, 68, 68, 0.4)";
           ctx.beginPath();
           ctx.arc(hitBall.x, hitBall.y, BALL_RADIUS + 3, 0, Math.PI * 2);
           ctx.fill();
 
           if (!isAimedTargetLegal && warningText) {
-            ctx.fillStyle = '#ef4444';
-            ctx.font = 'bold 11px sans-serif';
-            ctx.textAlign = 'center';
+            ctx.fillStyle = "#ef4444";
+            ctx.font = "bold 11px sans-serif";
+            ctx.textAlign = "center";
             ctx.fillText(warningText, hitBall.x, hitBall.y - 18);
           }
         }
 
-        // 7. Cue Stick with Dynamic Pull-Back
-        const cueLength = 260;
-        const cueOffset = 22 + (power / 100) * 65;
-        const cueStartX = cueBall.x - cosA * cueOffset;
-        const cueStartY = cueBall.y - sinA * cueOffset;
+        // 6. Realistic Cue Stick with Dynamic Pull-Back & Elemental Aura Glow
+        const cueLength = 270;
+        const cueOffset = 22 + (power / 100) * 75;
+        const cueTipX = cueBall.x - cosA * cueOffset;
+        const cueTipY = cueBall.y - sinA * cueOffset;
         const cueEndX = cueBall.x - cosA * (cueOffset + cueLength);
         const cueEndY = cueBall.y - sinA * (cueOffset + cueLength);
 
-        let cueColor = '#d97706';
-        if (selectedCue === 'dragon') cueColor = '#dc2626';
-        else if (selectedCue === 'neon') cueColor = '#06b6d4';
-        else if (selectedCue === 'gold') cueColor = '#fbbf24';
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
 
-        ctx.strokeStyle = cueColor;
-        ctx.lineWidth = 5;
+        // Gradient Shaft for Selected Cue
+        const grad = ctx.createLinearGradient(cueTipX, cueTipY, cueEndX, cueEndY);
+        grad.addColorStop(0, activeCue.tipColor);
+        grad.addColorStop(0.35, activeCue.glowColor);
+        grad.addColorStop(0.7, "#1e293b");
+        grad.addColorStop(1, "#090d16");
+
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 5.5;
+        ctx.lineCap = "round";
         ctx.beginPath();
-        ctx.moveTo(cueStartX, cueStartY);
+        ctx.moveTo(cueTipX, cueTipY);
         ctx.lineTo(cueEndX, cueEndY);
         ctx.stroke();
 
-        ctx.strokeStyle = '#ffffff';
+        // White Tip Ferrule
+        ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 6;
         ctx.beginPath();
-        ctx.moveTo(cueStartX, cueStartY);
-        ctx.lineTo(cueStartX - cosA * 8, cueStartY - sinA * 8);
+        ctx.moveTo(cueTipX, cueTipY);
+        ctx.lineTo(cueTipX - cosA * 8, cueTipY - sinA * 8);
         ctx.stroke();
+
+        // Elemental Aura / Glow effect for Legendary Cues
+        if (activeCue.category === "legendary") {
+          ctx.strokeStyle = activeCue.glowColor;
+          ctx.lineWidth = 9;
+          ctx.globalAlpha = 0.35 + Math.sin(Date.now() / 180) * 0.15;
+          ctx.shadowColor = activeCue.glowColor;
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.moveTo(cueTipX, cueTipY);
+          ctx.lineTo(cueEndX, cueEndY);
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+        }
+
+        ctx.restore();
       }
 
       updatePhysics();
@@ -1114,7 +1258,26 @@ function CueMasterApp() {
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [currentView, mode, turn, aimAngle, power, isShooting, soundEnabled, aimAssistLong, feltColor, selectedCue, isPractice, isBallInHand, ballInHandHoverPos, calledPocketId, humanGroup, botGroup, spinX, spinY]);
+  }, [
+    currentView,
+    mode,
+    turn,
+    aimAngle,
+    power,
+    isShooting,
+    soundEnabled,
+    aimAssistLong,
+    selectedCue,
+    selectedTable,
+    isPractice,
+    isBallInHand,
+    ballInHandHoverPos,
+    calledPocketId,
+    humanGroup,
+    botGroup,
+    spinX,
+    spinY,
+  ]);
 
   // Handle Mouse Events: Aim, Ball-in-Hand, Drag-to-Pull Stick
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1123,7 +1286,6 @@ function CueMasterApp() {
     const rect = canvas.getBoundingClientRect();
     const scaleX = TABLE_WIDTH / rect.width;
     const scaleY = TABLE_HEIGHT / rect.height;
-
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
@@ -1132,18 +1294,16 @@ function CueMasterApp() {
       return;
     }
 
-    if ((turn !== 'human' && !isPractice) || isShooting) return;
+    if ((turn !== "human" && !isPractice) || isShooting) return;
 
     const cueBall = ballsRef.current[0];
     if (cueBall) {
       if (isDraggingCueStick && dragStartPosRef.current) {
         const cosA = Math.cos(aimAngle);
         const sinA = Math.sin(aimAngle);
-        const pullDist = -((mouseX - dragStartPosRef.current.x) * cosA + (mouseY - dragStartPosRef.current.y) * sinA);
-        if (pullDist > 5) {
-          const calculatedPower = Math.min(100, Math.max(15, Math.round((pullDist / 130) * 100)));
-          setPower(calculatedPower);
-        }
+        const dragDist = (cueBall.x - mouseX) * cosA + (cueBall.y - mouseY) * sinA;
+        const calculatedPower = Math.min(100, Math.max(10, Math.round((dragDist / 180) * 100)));
+        setPower(calculatedPower);
       } else {
         const angle = Math.atan2(mouseY - cueBall.y, mouseX - cueBall.x);
         setAimAngle(angle);
@@ -1152,66 +1312,73 @@ function CueMasterApp() {
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isBallInHand || isShooting || (turn !== 'human' && !isPractice)) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const scaleX = TABLE_WIDTH / rect.width;
     const scaleY = TABLE_HEIGHT / rect.height;
-
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
-    for (const p of pockets) {
-      if (Math.hypot(p.x - mouseX, p.y - mouseY) < 32) {
-        setCalledPocketId(p.id);
-        if (soundEnabled) playBallClack(6);
-        setTurnMessage(`🎯 تم تحديد ${p.name} كجيب مستهدف!`);
-        return;
-      }
+    // Check if player clicked a pocket to CALL IT
+    const clickedPocket = pockets.find((p) => Math.hypot(p.x - mouseX, p.y - mouseY) < 32);
+    if (clickedPocket) {
+      setCalledPocketId(clickedPocket.id);
+      if (soundEnabled) playBallClack(3);
+      return;
     }
 
-    setIsDraggingCueStick(true);
-    dragStartPosRef.current = { x: mouseX, y: mouseY };
+    // Ball in Hand placement
+    if (isBallInHand) {
+      const minX = CUSHION + BALL_RADIUS + 5;
+      const maxX = TABLE_WIDTH - CUSHION - BALL_RADIUS - 5;
+      const minY = CUSHION + BALL_RADIUS + 5;
+      const maxY = TABLE_HEIGHT - CUSHION - BALL_RADIUS - 5;
+
+      const clampedX = Math.min(maxX, Math.max(minX, mouseX));
+      const clampedY = Math.min(maxY, Math.max(minY, mouseY));
+
+      const isOverlapping = ballsRef.current.slice(1).some((b) => !b.isPotted && Math.hypot(b.x - clampedX, b.y - clampedY) < BALL_RADIUS * 2.2);
+
+      if (!isOverlapping) {
+        const cueBall = ballsRef.current[0];
+        if (cueBall) {
+          cueBall.x = clampedX;
+          cueBall.y = clampedY;
+          cueBall.vx = 0;
+          cueBall.vy = 0;
+          cueBall.isPotted = false;
+          setIsBallInHand(false);
+          setBallInHandHoverPos(null);
+          setTurnMessage("✅ تم وضع الكرة بنجاح! حدد الهدف والبوكت واضرب.");
+          if (soundEnabled) playBallClack(4);
+        }
+      } else {
+        alert("لا يمكن وضع الكرة البيضاء فوق كرة أخرى!");
+      }
+      return;
+    }
+
+    // Start Dragging Cue Stick
+    if ((turn === "human" || isPractice) && !isShooting) {
+      setIsDraggingCueStick(true);
+      dragStartPosRef.current = { x: mouseX, y: mouseY };
+    }
   };
 
   const handleCanvasMouseUp = () => {
     if (isDraggingCueStick) {
       setIsDraggingCueStick(false);
       dragStartPosRef.current = null;
-      if (power >= 25) {
-        handleShoot();
-      }
+      handleShoot();
     }
   };
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = TABLE_WIDTH / rect.width;
-    const scaleY = TABLE_HEIGHT / rect.height;
-
-    const mouseX = (e.clientX - rect.left) * scaleX;
-    const mouseY = (e.clientY - rect.top) * scaleY;
-
-    if (isBallInHand) {
-      handlePlaceCueBall(mouseX, mouseY);
-      return;
-    }
-
-    for (const p of pockets) {
-      if (Math.hypot(p.x - mouseX, p.y - mouseY) < 32) {
-        setCalledPocketId(p.id);
-        if (soundEnabled) playBallClack(6);
-        setTurnMessage(`🎯 تم تحديد ${p.name} كجيب مستهدف!`);
-        return;
-      }
-    }
-  };
-
+  // Human Player Strike Action (with Cue Stats Modifiers)
   const handleShoot = () => {
-    if ((turn !== 'human' && !isPractice) || isShooting || isBallInHand) return;
+    if (isShooting || isBallInHand) return;
+    if (turn !== "human" && !isPractice) return;
+
     const cueBall = ballsRef.current[0];
     if (!cueBall || cueBall.isPotted) return;
 
@@ -1222,46 +1389,46 @@ function CueMasterApp() {
 
     setIsShooting(true);
     if (soundEnabled) playCueStrike(power);
-    const speed = (power / 100) * 26;
+
+    // Apply Cue Force Stat Modifier
+    const forceBonus = 0.85 + (activeCue.stats.force / 10) * 0.35;
+    const speed = (power / 100) * 24 * forceBonus;
     cueBall.vx = Math.cos(aimAngle) * speed;
     cueBall.vy = Math.sin(aimAngle) * speed;
   };
 
-  // Bot Turn Automation with Pocket Selection
+  // Bot AI Turn Execution
   useEffect(() => {
-    if (currentView === 'table' && turn === 'bot' && !isShooting && !gameOver && !isPractice && !isBallInHand) {
+    if (turn === "bot" && !isShooting && !gameOver && !isPractice && !isBallInHand) {
       const botTimer = setTimeout(() => {
         const cueBall = ballsRef.current[0];
-        let targetBalls = ballsRef.current.filter(b => !b.isPotted && b.type !== 'cue');
+        if (!cueBall || cueBall.isPotted) return;
 
-        if (botGroup !== 'unassigned') {
-          const groupBalls = targetBalls.filter(b => botGroup === 'solids' ? b.type === 'solid' : b.type === 'stripe');
-          if (groupBalls.length > 0) targetBalls = groupBalls;
-          else {
-            const b8 = targetBalls.find(b => b.number === 8);
-            if (b8) targetBalls = [b8];
+        const candidateBalls = ballsRef.current.filter((b) => {
+          if (b.isPotted || b.type === "cue") return false;
+          if (botGroup !== "unassigned") {
+            const botType = botGroup === "solids" ? "solid" : "stripe";
+            const botBallsLeft = ballsRef.current.filter((x) => !x.isPotted && (botGroup === "solids" ? x.type === "solid" : x.type === "stripe"));
+            if (botBallsLeft.length > 0) return b.type === botType;
+            return b.number === 8;
           }
-        }
+          return b.number !== 8;
+        });
 
-        if (cueBall && targetBalls.length > 0) {
-          let closest = targetBalls[0];
-          let minDist = 9999;
-          targetBalls.forEach(b => {
-            const d = Math.hypot(b.x - cueBall.x, b.y - cueBall.y);
-            if (d < minDist) {
-              minDist = d;
-              closest = b;
-            }
+        const targets = candidateBalls.length > 0 ? candidateBalls : ballsRef.current.filter((b) => !b.isPotted && b.type !== "cue");
+
+        if (targets.length > 0) {
+          const closest = targets.reduce((prev, curr) => {
+            const d1 = Math.hypot(prev.x - cueBall.x, prev.y - cueBall.y);
+            const d2 = Math.hypot(curr.x - cueBall.x, curr.y - cueBall.y);
+            return d1 < d2 ? prev : curr;
           });
 
-          let bestPocket = pockets[0];
-          let minPocketDist = 9999;
-          pockets.forEach(p => {
-            const pd = Math.hypot(p.x - closest.x, p.y - closest.y);
-            if (pd < minPocketDist) {
-              minPocketDist = pd;
-              bestPocket = p;
-            }
+          // Bot Calls Pocket
+          const bestPocket = pockets.reduce((prev, curr) => {
+            const d1 = Math.hypot(prev.x - closest.x, prev.y - closest.y);
+            const d2 = Math.hypot(curr.x - closest.x, curr.y - closest.y);
+            return d1 < d2 ? prev : curr;
           });
           setCalledPocketId(bestPocket.id);
           activeShotCalledPocketRef.current = bestPocket.id;
@@ -1278,14 +1445,14 @@ function CueMasterApp() {
           cueBall.vx = Math.cos(targetAngle) * botSpeed;
           cueBall.vy = Math.sin(targetAngle) * botSpeed;
         }
-      }, 2300);
+      }, 1500);
 
       return () => clearTimeout(botTimer);
     }
   }, [currentView, turn, isShooting, gameOver, isPractice, isBallInHand, botGroup, soundEnabled]);
 
   // Launch Table Match
-  const startMatch = (targetMode: '8-ball' | 'snooker', practice = false, tableStake = 100) => {
+  const startMatch = (targetMode: "8-ball" | "snooker", practice = false, tableStake = 100) => {
     setMode(targetMode);
     setIsPractice(practice);
     setStake(tableStake);
@@ -1293,641 +1460,636 @@ function CueMasterApp() {
     setHumanScore(0);
     setBotScore(0);
     setGameOver(null);
-    setTurn('human');
-    setActiveModal(null);
-    setTurnMessage('طاولة مفتوحة: أول كرة تسقطها تحدد صنفك (سادة أم ألوان)!');
     initBalls(targetMode);
-    setCurrentView('table');
+    setCurrentView("table");
   };
 
-  const getGroupBalls = (group: 'solids' | 'stripes') => {
-    const min = group === 'solids' ? 1 : 9;
-    const max = group === 'solids' ? 7 : 15;
-    const res: { num: number; potted: boolean; color: string }[] = [];
-    for (let i = min; i <= max; i++) {
-      const b = ballsRef.current.find(ball => ball.number === i);
-      res.push({
-        num: i,
-        potted: b ? b.isPotted : false,
-        color: BALL_CONFIG_MAP[i]?.color || '#ffffff'
-      });
-    }
-    return res;
-  };
+  const humanRemainingBalls = ballsRef.current.filter(
+    (b) => !b.isPotted && b.number !== 8 && (humanGroup === "solids" ? b.type === "solid" : b.type === "stripe")
+  );
 
   return (
-    <div className="w-full h-full min-h-screen bg-[#02070f] text-slate-100 flex flex-col font-sans select-none overflow-x-hidden relative" dir="rtl">
+    <div className="relative w-full min-h-screen bg-[#020b14] text-slate-100 flex flex-col font-sans select-none overflow-hidden" dir="rtl">
+      {/* ========================================================= */}
+      {/* VIEW 1: CUE MASTER MAIN LOBBY                             */}
+      {/* ========================================================= */}
+      {currentView === "menu" ? (
+        <div className="relative w-full h-screen flex flex-col justify-between bg-cover bg-center overflow-hidden" style={{ backgroundImage: "url('/cue_master_bg.jpg')" }}>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/45 to-black/90 pointer-events-none" />
 
-      {/* ======================================================== */}
-      {/* 1. CUE MASTER LOBBY / MAIN MENU                          */}
-      {/* ======================================================== */}
-      {currentView === 'menu' && (
-        <div
-          className="relative flex-1 flex flex-col justify-between p-4 md:p-8 bg-cover bg-center overflow-hidden min-h-screen"
-          style={{
-            backgroundImage: `linear-gradient(rgba(2, 7, 15, 0.45), rgba(2, 7, 15, 0.7)), url('/cue_master_bg.jpg')`,
-            backgroundPosition: 'center 45%'
-          }}
-        >
           {/* Top Bar: Profile & Currencies */}
-          <div className="flex justify-between items-center z-10 w-full max-w-6xl mx-auto">
-            
-            <div className="flex items-center gap-3 bg-black/60 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-700/60 shadow-xl">
-              <img
-                src={avatar}
-                alt={username}
-                className="w-12 h-12 rounded-full border-2 border-amber-400 bg-slate-900 shadow-md"
-              />
+          <header className="relative z-10 flex items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-amber-500/30">
+              <img src={avatar} alt="Avatar" className="w-10 h-10 rounded-xl bg-amber-400/20 p-1 border border-amber-400" />
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-white">{username}</span>
-                  <span className="text-[10px] bg-slate-800 text-amber-300 px-2 py-0.5 rounded-full font-bold border border-slate-700">
-                    Level 1
-                  </span>
+                  <span className="font-black text-amber-300 text-sm">{username}</span>
+                  <span className="text-[10px] bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full font-bold">Level 1</span>
                 </div>
-                <div className="w-24 h-2 bg-slate-800 rounded-full mt-1.5 overflow-hidden border border-slate-700">
-                  <div className="h-full bg-gradient-to-r from-emerald-500 to-green-400 w-3/5 rounded-full" />
+                <div className="w-24 bg-slate-800 h-1.5 rounded-full mt-1 overflow-hidden">
+                  <div className="bg-emerald-400 h-full w-2/5 rounded-full" />
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-amber-500/40 shadow-lg">
+            <div className="flex items-center gap-4">
+              {/* Active Cue Quick Pill */}
+              <button
+                onClick={() => { setShopTab("cues"); setActiveModal("shop"); }}
+                className="hidden sm:flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700 hover:border-amber-400 cursor-pointer transition-all"
+              >
+                <span className="text-[11px] text-slate-400">العصا:</span>
+                <span className="text-xs font-bold text-amber-300">{activeCue.nameAr}</span>
+              </button>
+
+              {/* Coins Counter */}
+              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-amber-500/40">
+                <span className="text-base">🪙</span>
+                <span className="font-black text-amber-400 text-sm tracking-wide">{coins.toLocaleString()}</span>
                 <button
-                  onClick={() => setCoins(c => c + 1000)}
+                  onClick={() => saveCoins(coins + 5000)}
                   className="w-5 h-5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center cursor-pointer shadow"
                 >
                   +
                 </button>
-                <span className="text-[11px] font-black text-amber-300 font-mono">
-                  {coins.toLocaleString()}
-                </span>
-                <span className="text-sm">🪙</span>
-                <span className="text-[9px] font-bold text-slate-400 tracking-wider">COINS</span>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-fuchsia-500/40 shadow-lg">
+              {/* Gems Counter */}
+              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-fuchsia-500/40">
+                <span className="text-base">💎</span>
+                <span className="font-black text-fuchsia-400 text-sm tracking-wide">{gems.toLocaleString()}</span>
                 <button
-                  onClick={() => setGems(g => g + 50)}
+                  onClick={() => saveGems(gems + 50)}
                   className="w-5 h-5 rounded-md bg-fuchsia-500 hover:bg-fuchsia-400 text-white font-black text-xs flex items-center justify-center cursor-pointer shadow"
                 >
                   +
                 </button>
-                <span className="text-[11px] font-black text-fuchsia-300 font-mono">
-                  {gems.toLocaleString()}
-                </span>
-                <span className="text-sm">💎</span>
-                <span className="text-[9px] font-bold text-slate-400 tracking-wider">GEMS</span>
               </div>
             </div>
+          </header>
 
-          </div>
-
-          {/* Center Logo */}
-          <div className="flex flex-col items-center justify-center my-auto z-10 text-center animate-fade-in py-6">
-            <div className="relative select-none">
-              <h1 className="text-6xl md:text-8xl font-black italic tracking-wide text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-700 drop-shadow-[0_8px_16px_rgba(0,0,0,0.9)]">
-                CUE
+          {/* Center Brand: CUE MASTER Logo */}
+          <div className="relative z-10 flex flex-col items-center justify-center text-center px-4 -mt-6">
+            <div className="relative inline-block mb-3">
+              <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-700 drop-shadow-[0_10px_20px_rgba(0,0,0,0.9)]">
+                CUE MASTER
               </h1>
-              <div className="text-4xl md:text-6xl font-black tracking-widest text-cyan-300 drop-shadow-[0_0_25px_rgba(6,182,212,0.8)] -mt-3 md:-mt-5">
-                MASTER
-              </div>
+              <p className="text-cyan-400 tracking-[0.25em] text-xs md:text-sm font-extrabold uppercase drop-shadow-[0_0_12px_rgba(6,182,212,0.8)]">
+                بلياردو الملوك والسنوكر العالمي
+              </p>
             </div>
-            <p className="text-xs md:text-sm font-bold text-amber-200/90 mt-2 bg-black/50 px-4 py-1 rounded-full border border-amber-500/30 backdrop-blur-sm">
-              🎱 البلياردو والسنوكر الاحترافي • تحدي الأساطير
-            </p>
 
-            {/* 4 Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-lg mt-8">
-              
+            {/* 4 Glossy Action Buttons */}
+            <div className="grid grid-cols-2 gap-4 w-full max-w-md mt-4">
               <button
-                onClick={() => setActiveModal('stake_select')}
-                className="group relative flex items-center justify-center gap-3 py-3.5 px-6 rounded-2xl bg-gradient-to-b from-emerald-500 via-green-600 to-emerald-800 hover:from-emerald-400 hover:to-green-700 border-2 border-emerald-300/80 shadow-[0_6px_0_#064e3b,0_10px_20px_rgba(16,185,129,0.4)] active:translate-y-1 active:shadow-[0_2px_0_#064e3b] transition-all cursor-pointer"
+                onClick={() => setActiveModal("stake_select")}
+                className="group relative flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-black text-base shadow-[0_8px_20px_rgba(34,197,94,0.4)] border border-emerald-300/40 bg-gradient-to-b from-emerald-400 via-emerald-600 to-emerald-800 hover:from-emerald-300 hover:to-emerald-700 active:scale-95 transition-all cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-xl bg-white/20 border border-white/40 flex items-center justify-center shadow-inner">
-                  <span className="text-white text-base">▶</span>
-                </div>
-                <span className="text-lg md:text-xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] tracking-wider">
-                  PLAY NOW
-                </span>
+                <span className="text-2xl drop-shadow">▶️</span>
+                <span className="tracking-wide text-white drop-shadow">العب الآن</span>
               </button>
 
               <button
-                onClick={() => setActiveModal('stake_select')}
-                className="group relative flex items-center justify-center gap-3 py-3.5 px-6 rounded-2xl bg-gradient-to-b from-blue-500 via-sky-600 to-blue-800 hover:from-blue-400 hover:to-sky-700 border-2 border-sky-300/80 shadow-[0_6px_0_#1e3a8a,0_10px_20px_rgba(14,165,233,0.4)] active:translate-y-1 active:shadow-[0_2px_0_#1e3a8a] transition-all cursor-pointer"
+                onClick={() => setActiveModal("stake_select")}
+                className="group relative flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-black text-base shadow-[0_8px_20px_rgba(37,99,235,0.4)] border border-blue-300/40 bg-gradient-to-b from-blue-400 via-blue-600 to-blue-800 hover:from-blue-300 hover:to-blue-700 active:scale-95 transition-all cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-xl bg-white/20 border border-white/40 flex items-center justify-center shadow-inner">
-                  <span className="text-white text-base">👥</span>
-                </div>
-                <span className="text-lg md:text-xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] tracking-wider">
-                  MULTIPLAYER
-                </span>
+                <span className="text-2xl drop-shadow">👥</span>
+                <span className="tracking-wide text-white drop-shadow">أونلاين</span>
               </button>
 
               <button
-                onClick={() => setActiveModal('tournaments')}
-                className="group relative flex items-center justify-center gap-3 py-3.5 px-6 rounded-2xl bg-gradient-to-b from-amber-500 via-orange-600 to-amber-800 hover:from-amber-400 hover:to-orange-700 border-2 border-amber-300/80 shadow-[0_6px_0_#7c2d12,0_10px_20px_rgba(245,158,11,0.4)] active:translate-y-1 active:shadow-[0_2px_0_#7c2d12] transition-all cursor-pointer"
+                onClick={() => setActiveModal("tournaments")}
+                className="group relative flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-black text-base shadow-[0_8px_20px_rgba(217,119,6,0.4)] border border-amber-300/40 bg-gradient-to-b from-amber-400 via-amber-600 to-amber-800 hover:from-amber-300 hover:to-amber-700 active:scale-95 transition-all cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-xl bg-white/20 border border-white/40 flex items-center justify-center shadow-inner">
-                  <span className="text-amber-200 text-base">🏆</span>
-                </div>
-                <span className="text-lg md:text-xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] tracking-wider">
-                  TOURNAMENTS
-                </span>
+                <span className="text-2xl drop-shadow">🏆</span>
+                <span className="tracking-wide text-white drop-shadow">البطولات</span>
               </button>
 
               <button
-                onClick={() => startMatch('8-ball', true, 0)}
-                className="group relative flex items-center justify-center gap-3 py-3.5 px-6 rounded-2xl bg-gradient-to-b from-slate-400 via-slate-600 to-slate-800 hover:from-slate-300 hover:to-slate-700 border-2 border-slate-300/80 shadow-[0_6px_0_#1e293b,0_10px_20px_rgba(100,116,139,0.4)] active:translate-y-1 active:shadow-[0_2px_0_#1e293b] transition-all cursor-pointer"
+                onClick={() => startMatch("8-ball", true, 0)}
+                className="group relative flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-black text-base shadow-[0_8px_20px_rgba(100,116,139,0.4)] border border-slate-400/40 bg-gradient-to-b from-slate-400 via-slate-600 to-slate-800 hover:from-slate-300 hover:to-slate-700 active:scale-95 transition-all cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-xl bg-white/20 border border-white/40 flex items-center justify-center shadow-inner">
-                  <span className="text-white text-base">🎯</span>
-                </div>
-                <span className="text-lg md:text-xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] tracking-wider">
-                  PRACTICE
-                </span>
+                <span className="text-2xl drop-shadow">🎯</span>
+                <span className="tracking-wide text-white drop-shadow">تدريب فردي</span>
               </button>
-
             </div>
           </div>
 
-          {/* Bottom Bar */}
-          <div className="flex justify-between items-end z-10 w-full max-w-5xl mx-auto pt-4">
+          {/* Bottom Bar: Settings, Shop, Leaderboard */}
+          <footer className="relative z-10 flex items-center justify-between px-6 py-4">
             <button
-              onClick={() => setActiveModal('settings')}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-xl text-xs font-black shadow-lg cursor-pointer transition-all active:scale-95"
+              onClick={() => setActiveModal("settings")}
+              className="flex items-center gap-2 bg-black/60 hover:bg-slate-900/80 px-4 py-2.5 rounded-2xl border border-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
             >
               <span>⚙️</span>
-              <span>SETTINGS</span>
+              <span className="text-xs font-black">الإعدادات</span>
             </button>
 
-            <div className="flex flex-col items-center -mb-2">
-              <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[8px] border-b-amber-500 mb-0.5" />
-              <button
-                onClick={() => setActiveModal('shop')}
-                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-t from-black via-slate-950 to-slate-900 text-amber-300 border-2 border-amber-500/80 rounded-t-2xl text-xs font-black shadow-[0_0_15px_rgba(245,158,11,0.3)] hover:text-white cursor-pointer transition-all"
-              >
-                <span>🛒</span>
-                <span>SHOP</span>
-              </button>
-            </div>
+            {/* Glowing SHOP Button */}
+            <button
+              onClick={() => setActiveModal("shop")}
+              className="group relative flex items-center gap-3 bg-gradient-to-b from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 px-6 py-3 rounded-2xl border-2 border-amber-200 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.6)] active:scale-95 transition-all cursor-pointer"
+            >
+              <span className="text-xl">🛒</span>
+              <span className="text-sm tracking-wider uppercase">المتجر (SHOP)</span>
+            </button>
 
             <button
-              onClick={() => setActiveModal('leaderboard')}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-xl text-xs font-black shadow-lg cursor-pointer transition-all active:scale-95"
+              onClick={() => setActiveModal("leaderboard")}
+              className="flex items-center gap-2 bg-black/60 hover:bg-slate-900/80 px-4 py-2.5 rounded-2xl border border-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer shadow-lg active:scale-95"
             >
-              <span>LEADERBOARD</span>
               <span>🏆</span>
+              <span className="text-xs font-black">المتصدرين</span>
             </button>
-          </div>
-
+          </footer>
         </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* 2. PLAYABLE CANVAS TABLE SCREEN WITH RULES & CONTROLS    */}
-      {/* ======================================================== */}
-      {currentView === 'table' && (
-        <div className="flex-1 flex flex-col justify-between overflow-hidden relative">
-          
-          {/* Top Bar: Players, Groups (سادة أم ألوان) & Real-time Ball Status */}
-          <div className="bg-slate-950/95 border-b border-slate-800 p-3 md:p-4 flex flex-wrap justify-between items-center gap-4 z-20">
-            
-            {/* Human Player Card */}
-            <div className={`flex items-center gap-3 p-2.5 rounded-2xl transition-all ${turn === 'human' || isPractice ? 'bg-indigo-950/70 border border-indigo-500/70 shadow-[0_0_20px_rgba(99,102,241,0.35)]' : 'opacity-75'}`}>
-              <img src={avatar} alt={username} className="w-12 h-12 rounded-full border-2 border-indigo-400 bg-slate-900" />
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-white">{username}</span>
-                  {(turn === 'human' || isPractice) && <span className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">دورك!</span>}
-                </div>
-
-                {/* Group Badge & Mini Balls List */}
-                {mode === '8-ball' ? (
-                  <div className="mt-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-black ${
-                        humanGroup === 'unassigned' 
-                          ? 'bg-slate-800 text-slate-300 border border-slate-700' 
-                          : humanGroup === 'solids' 
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                          : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                      }`}>
-                        {humanGroup === 'unassigned' ? 'طاولة مفتوحة ⚪' : humanGroup === 'solids' ? 'صنفك: سادة 🟡 (1-7)' : 'صنفك: ألوان 🔵 (9-15)'}
-                      </span>
-                    </div>
-
-                    {/* Visual Ball Inventory */}
-                    {humanGroup !== 'unassigned' && (
-                      <div className="flex gap-1 mt-1.5">
-                        {getGroupBalls(humanGroup).map(b => (
-                          <div
-                            key={b.num}
-                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black border transition-all ${
-                              b.potted 
-                                ? 'bg-slate-900 border-slate-800 text-slate-600 line-through opacity-30' 
-                                : 'text-slate-950 font-bold border-white/60 shadow'
-                            }`}
-                            style={{ backgroundColor: b.potted ? '#1e293b' : b.color }}
-                            title={`كرة رقم ${b.num} ${b.potted ? '(تم إسقاطها)' : '(متبقية)'}`}
-                          >
-                            {!b.potted && b.num}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-[11px] font-bold text-amber-300 mt-1">النقاط: {humanScore}</div>
+      ) : (
+        /* ========================================================= */
+        /* VIEW 2: ACTIVE MATCH TABLE SCREEN                         */
+        /* ========================================================= */
+        <div className="flex-1 flex flex-col justify-between p-2 md:p-4 bg-[#020b14] max-w-6xl mx-auto w-full">
+          {/* Top In-Game HUD Bar */}
+          <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-2xl p-3 shadow-xl backdrop-blur-md">
+            {/* Player Info & Remaining Group Balls */}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <img src={avatar} alt="You" className="w-11 h-11 rounded-xl bg-slate-800 border-2 border-amber-400 shadow-md" />
+                {turn === "human" && (
+                  <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse" />
                 )}
               </div>
-            </div>
-
-            {/* Center Status Banner & Call Pocket Alert */}
-            <div className="text-center max-w-sm">
-              <div className="text-xs font-black px-3.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                {turnMessage}
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-center gap-2">
-                <span>{calledPocketId !== null ? `🎯 الجيب المختار: ${pockets[calledPocketId].name}` : 'اضغط على أي جيب لتحديده'}</span>
-                {isBallInHand && <span className="text-emerald-400 font-bold animate-bounce">✋ الكرة في اليد</span>}
-              </div>
-            </div>
-
-            {/* Opponent Card */}
-            <div className="flex items-center gap-3">
-              {!isPractice ? (
-                <div className={`flex items-center gap-3 p-2.5 rounded-2xl transition-all ${turn === 'bot' ? 'bg-rose-950/70 border border-rose-500/70 shadow-[0_0_20px_rgba(244,63,94,0.35)]' : 'opacity-75'}`}>
-                  <div className="text-left">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {turn === 'bot' && <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">يفكر...</span>}
-                      <span className="text-xs font-black text-white">{opponentName}</span>
-                      <span className="text-xs">{opponentFlag}</span>
-                    </div>
-
-                    {mode === '8-ball' ? (
-                      <div className="mt-1">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <span className={`text-[10px] px-2 py-0.5 rounded font-black ${
-                            botGroup === 'unassigned' 
-                              ? 'bg-slate-800 text-slate-300 border border-slate-700' 
-                              : botGroup === 'solids' 
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
-                              : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                          }`}>
-                            {botGroup === 'unassigned' ? 'طاولة مفتوحة ⚪' : botGroup === 'solids' ? 'صنفه: سادة 🟡 (1-7)' : 'صنفه: ألوان 🔵 (9-15)'}
-                          </span>
-                        </div>
-
-                        {botGroup !== 'unassigned' && (
-                          <div className="flex gap-1 mt-1.5 justify-end">
-                            {getGroupBalls(botGroup).map(b => (
-                              <div
-                                key={b.num}
-                                className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black border transition-all ${
-                                  b.potted 
-                                    ? 'bg-slate-900 border-slate-800 text-slate-600 line-through opacity-30' 
-                                    : 'text-slate-950 font-bold border-white/60 shadow'
-                                }`}
-                                style={{ backgroundColor: b.potted ? '#1e293b' : b.color }}
-                                title={`كرة الخصم رقم ${b.num} ${b.potted ? '(سقطت)' : '(متبقية)'}`}
-                              >
-                                {!b.potted && b.num}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black text-amber-300">{username}</span>
+                  <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">أنت</span>
+                </div>
+                {/* Balls Assigned & Remaining Status */}
+                <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mt-0.5">
+                  {mode === "8-ball" ? (
+                    humanGroup === "unassigned" ? (
+                      <span className="text-amber-400 font-bold">طاولة مفتوحة</span>
                     ) : (
-                      <div className="text-[11px] font-bold text-amber-300 text-left mt-1">النقاط: {botScore}</div>
-                    )}
-                  </div>
-                  <img src={opponentAvatar} alt={opponentName} className="w-12 h-12 rounded-full border-2 border-rose-400 bg-slate-900" />
+                      <span className="flex items-center gap-1">
+                        <span className="text-amber-300">{humanGroup === "solids" ? "سادة 🟡" : "ألوان 🔵"}</span>
+                        <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-300">متبقي: {humanRemainingBalls.length}</span>
+                        {humanRemainingBalls.length === 0 && <span className="text-xs text-amber-400 font-black animate-pulse">🎯 العب 8!</span>}
+                      </span>
+                    )
+                  ) : (
+                    <span>النقاط: {humanScore}</span>
+                  )}
                 </div>
-              ) : (
-                <div className="px-3 py-2 bg-slate-900 rounded-xl border border-slate-800 text-xs text-slate-400 font-bold">
-                  تدريب فردي بدون خصم
-                </div>
-              )}
-
-              {/* Menu Button */}
-              <button
-                onClick={() => setCurrentView('menu')}
-                className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 text-xs font-black transition-all cursor-pointer shadow"
-              >
-                🏠 قائمة كيو ماستر
-              </button>
-
-              <button
-                onClick={handleCloseToParent}
-                className="p-2 rounded-xl bg-slate-900 hover:bg-rose-950/60 border border-slate-800 text-slate-400 hover:text-white text-xs font-bold transition-all cursor-pointer"
-                title="إغلاق"
-              >
-                ✕
-              </button>
+              </div>
             </div>
 
+            {/* Center Match Stats & Turn Message */}
+            <div className="flex flex-col items-center max-w-xs text-center">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                  {mode === "8-ball" ? "8-Ball Pool" : "Snooker"}
+                </span>
+                <span className="text-xs font-bold text-amber-400">الجائزة: {prize.toLocaleString()} 🪙</span>
+              </div>
+              <div className="text-[11px] font-black text-amber-200 mt-1 line-clamp-1">{turnMessage}</div>
+            </div>
+
+            {/* Opponent Info */}
+            <div className="flex items-center gap-3">
+              <div className="text-left">
+                <div className="flex items-center gap-1.5 justify-end">
+                  <span className="text-xs font-black text-slate-200">{opponentName}</span>
+                  <span>{opponentFlag}</span>
+                </div>
+                <div className="text-[11px] font-bold text-slate-400">
+                  {isPractice ? "وضع التدريب" : botGroup === "unassigned" ? "طاولة مفتوحة" : botGroup === "solids" ? "سادة 🟡" : "ألوان 🔵"}
+                </div>
+              </div>
+              <div className="relative">
+                <img src={opponentAvatar} alt="Opponent" className="w-11 h-11 rounded-xl bg-slate-800 border-2 border-slate-700 shadow-md" />
+                {turn === "bot" && (
+                  <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse" />
+                )}
+              </div>
+
+              {/* Shop & Exit Buttons */}
+              <button
+                onClick={() => setActiveModal("shop")}
+                className="w-9 h-9 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/50 flex items-center justify-center text-amber-300 font-black text-sm cursor-pointer ml-1"
+                title="تغيير العصا أو الطاولة"
+              >
+                🛒
+              </button>
+              <button
+                onClick={() => setCurrentView("menu")}
+                className="w-9 h-9 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/50 flex items-center justify-center text-rose-300 font-black text-xs cursor-pointer"
+                title="خروج للقائمة الرئيسية"
+              >
+                🚪
+              </button>
+            </div>
           </div>
 
-          {/* Group Assignment Big Announcement Modal */}
+          {/* Group Assignment Banner Overlay */}
           {groupAnnouncement && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-slate-950/95 border-2 border-amber-400 p-6 rounded-3xl shadow-[0_0_50px_rgba(245,158,11,0.5)] flex flex-col items-center justify-center space-y-4 animate-bounce text-center">
-              <span className="text-4xl">🎱</span>
-              <h3 className="text-lg font-black text-amber-300">{groupAnnouncement.title}</h3>
-              <div className="flex gap-4 items-center">
-                <div className="bg-slate-900 border border-indigo-500/50 px-4 py-2 rounded-2xl text-center">
-                  <div className="text-[10px] text-slate-400 font-bold">{username} (أنت)</div>
-                  <div className="text-sm font-black text-emerald-400 mt-0.5">{groupAnnouncement.human}</div>
-                </div>
-                <span className="text-slate-500 font-black text-xs">VS</span>
-                <div className="bg-slate-900 border border-rose-500/50 px-4 py-2 rounded-2xl text-center">
-                  <div className="text-[10px] text-slate-400 font-bold">{opponentName} (الخصم)</div>
-                  <div className="text-sm font-black text-rose-400 mt-0.5">{groupAnnouncement.bot}</div>
-                </div>
+            <div className="bg-gradient-to-r from-amber-500/20 via-amber-500/30 to-amber-500/20 border border-amber-500/50 rounded-2xl p-2.5 my-2 text-center animate-bounce">
+              <div className="text-xs font-black text-amber-300">{groupAnnouncement.title}</div>
+              <div className="text-[11px] font-bold text-slate-200 mt-0.5">
+                أنت: <span className="text-amber-400">{groupAnnouncement.human}</span> | الخصم: <span className="text-slate-300">{groupAnnouncement.bot}</span>
               </div>
-              <p className="text-[10px] text-slate-400">أي كرة تلمسها من صنف الخصم أولاً ستعتبر فاول فوري!</p>
             </div>
           )}
 
-          {/* Canvas Table Area with Interactive Controls */}
-          <div className="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-hidden relative">
-            
-            <div className="w-full max-w-[960px] aspect-[2/1] relative rounded-3xl overflow-hidden shadow-[0_0_70px_rgba(0,0,0,0.95)] border-4 border-amber-950">
-              <canvas
-                ref={canvasRef}
-                width={TABLE_WIDTH}
-                height={TABLE_HEIGHT}
-                onMouseMove={handleCanvasMouseMove}
-                onMouseDown={handleCanvasMouseDown}
-                onMouseUp={handleCanvasMouseUp}
-                onClick={handleCanvasClick}
-                className={`w-full h-full ${isBallInHand ? 'cursor-grab' : 'cursor-crosshair'}`}
-              />
+          {/* Billiards Canvas Viewport */}
+          <div className="relative flex-1 flex items-center justify-center my-2">
+            <canvas
+              ref={canvasRef}
+              width={TABLE_WIDTH}
+              height={TABLE_HEIGHT}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseUp={handleCanvasMouseUp}
+              className={`w-full max-h-[68vh] object-contain rounded-2xl shadow-2xl border-4 ${
+                currentTable.id === "ice_frost"
+                  ? "border-cyan-500/50 shadow-cyan-500/20"
+                  : currentTable.id === "volcanic_lava"
+                  ? "border-rose-600/50 shadow-rose-600/20"
+                  : currentTable.id === "royal_purple"
+                  ? "border-amber-400/50 shadow-amber-400/20"
+                  : "border-amber-950/90 shadow-black"
+              } ${isBallInHand ? "cursor-grab" : isDraggingCueStick ? "cursor-grabbing" : "cursor-crosshair"}`}
+            />
+          </div>
 
-              {/* Game Over Modal */}
-              {gameOver && (
-                <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 space-y-4 animate-fade-in z-30">
-                  <span className="text-5xl">🏆</span>
-                  <h2 className="text-xl md:text-2xl font-black text-amber-400 text-center max-w-md">{gameOver}</h2>
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={() => {
-                        setGameOver(null);
-                        initBalls(mode);
-                      }}
-                      className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg cursor-pointer"
-                    >
-                      جولة جديدة 🔄
-                    </button>
-                    <button
-                      onClick={() => setCurrentView('menu')}
-                      className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-black text-sm shadow-lg cursor-pointer"
-                    >
-                      القائمة الرئيسية 🏠
-                    </button>
-                  </div>
-                </div>
-              )}
+          {/* Bottom Table Controls Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-3 shadow-xl backdrop-blur-md">
+            {/* Interactive English / Spin Widget */}
+            <div className="flex items-center gap-3">
+              <div
+                className="relative w-12 h-12 rounded-full bg-slate-100 border-2 border-slate-400 cursor-pointer shadow-inner flex items-center justify-center"
+                title="اضغط لتحديد نقطة ضرب المضرب (اسكروه، توب سبن، دوران جانبي)"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+                  const y = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+                  const dist = Math.hypot(x, y);
+                  if (dist <= 0.85) {
+                    setSpinX(Math.round(x * 10) / 10);
+                    setSpinY(Math.round(y * 10) / 10);
+                  } else {
+                    setSpinX(0);
+                    setSpinY(0);
+                  }
+                }}
+              >
+                <div className="absolute w-full h-[1px] bg-slate-300" />
+                <div className="absolute h-full w-[1px] bg-slate-300" />
+                <div
+                  className="w-3.5 h-3.5 bg-rose-600 rounded-full border border-white shadow-md transition-all pointer-events-none"
+                  style={{ transform: `translate(${spinX * 18}px, ${spinY * 18}px)` }}
+                />
+              </div>
+
+              <div className="text-[11px] font-bold text-slate-300">
+                <div className="text-amber-400 font-black">الدوران (Spin):</div>
+                <div>{spinY < -0.2 ? "اسكروه (Backspin) 🔻" : spinY > 0.2 ? "توب سبن (Topspin) 🔺" : "ضربة في المركز"}</div>
+              </div>
             </div>
 
-            {/* Bottom Controls Bar: Pockets Selector, Spin Controller, Cue Pull-Back Gauge */}
-            <div className="w-full max-w-[960px] mt-3 bg-slate-950/90 border border-slate-800 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3">
-              
-              {/* 1. Quick Call Pocket Selector */}
-              <div className="flex items-center gap-1.5 bg-slate-900/80 p-1.5 rounded-xl border border-slate-800">
-                <span className="text-[10px] font-black text-amber-300 ml-1">🎯 الجيب:</span>
+            {/* Target Called Pocket Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black text-slate-400">الجيب الهدف:</span>
+              <div className="flex items-center gap-1">
                 {pockets.map((p) => (
                   <button
                     key={p.id}
-                    onClick={() => {
-                      setCalledPocketId(p.id);
-                      if (soundEnabled) playBallClack(6);
-                    }}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-black cursor-pointer transition-all ${calledPocketId === p.id ? 'bg-amber-500 text-slate-950 shadow' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                    onClick={() => setCalledPocketId(p.id)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                      calledPocketId === p.id
+                        ? "bg-amber-400 text-slate-950 shadow-md scale-105"
+                        : "bg-slate-800 text-slate-400 hover:text-white"
+                    }`}
                   >
                     {p.name}
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* 2. Cue Ball Spin / English Widget */}
-              <div className="flex items-center gap-2.5 bg-slate-900/80 p-2 rounded-xl border border-slate-800">
-                <div
-                  className="w-12 h-12 rounded-full bg-gradient-to-br from-white via-slate-100 to-slate-300 relative shadow-inner border-2 border-slate-600 cursor-pointer flex items-center justify-center overflow-hidden"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const rx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                    const ry = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-                    setSpinX(Math.max(-0.9, Math.min(0.9, rx)));
-                    setSpinY(Math.max(-0.9, Math.min(0.9, ry)));
-                  }}
-                  title="اضغط على الكرة لتحديد نقطة ضرب المضرب (اسكروه أو توب سبن)"
-                >
-                  <div className="absolute w-full h-[1px] bg-slate-300" />
-                  <div className="absolute h-full w-[1px] bg-slate-300" />
-                  <div
-                    className="w-3.5 h-3.5 rounded-full bg-red-600 shadow-md border border-white absolute transition-all"
-                    style={{
-                      transform: `translate(${spinX * 18}px, ${-spinY * 18}px)`
-                    }}
-                  />
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-black text-amber-300">
-                    {spinY < -0.2 ? '🔴 اسكروه (Backspin)' : spinY > 0.2 ? '🟢 توب سبن (Follow)' : '⚪ ضربة عادية'}
-                  </div>
-                  <div className="flex gap-1 mt-1">
-                    <button
-                      onClick={() => { setSpinX(0); setSpinY(-0.8); }}
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${spinY < -0.2 ? 'bg-red-600 text-white' : 'bg-slate-800 text-slate-300'}`}
-                    >
-                      اسكروه
-                    </button>
-                    <button
-                      onClick={() => { setSpinX(0); setSpinY(0.8); }}
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${spinY > 0.2 ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-300'}`}
-                    >
-                      توب
-                    </button>
-                    <button
-                      onClick={() => { setSpinX(0); setSpinY(0); }}
-                      className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400"
-                    >
-                      وسط
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Interactive Cue Stick Pull-Back Gauge */}
-              <div className="flex items-center gap-2.5 flex-1 max-w-[200px] bg-slate-900/80 p-2 rounded-xl border border-slate-800">
-                <span className="text-[11px] font-black text-amber-300 whitespace-nowrap">سحب المضرب:</span>
+            {/* Power Slider & Shoot Button */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                <span className="text-[11px] text-slate-400 font-bold">القوة:</span>
                 <input
                   type="range"
-                  min="20"
+                  min="10"
                   max="100"
                   value={power}
                   onChange={(e) => setPower(parseInt(e.target.value))}
-                  disabled={(!isPractice && turn !== 'human') || isShooting || isBallInHand}
-                  className="flex-1 accent-amber-500 cursor-pointer"
+                  disabled={(!isPractice && turn !== "human") || isShooting || isBallInHand}
+                  className="w-24 accent-amber-500 cursor-pointer"
                 />
-                <span className="text-[11px] font-black text-amber-400 w-8 text-center">{power}%</span>
+                <span className="text-[11px] font-black text-amber-400 w-7 text-center">{power}%</span>
               </div>
 
-              {/* 4. Action Shoot Button */}
               <button
                 onClick={handleShoot}
-                disabled={(!isPractice && turn !== 'human') || isShooting || isBallInHand}
+                disabled={(!isPractice && turn !== "human") || isShooting || isBallInHand}
                 className={`px-5 py-2.5 rounded-xl font-black text-xs transition-all shadow-lg cursor-pointer ${
-                  (isPractice || turn === 'human') && !isShooting && !isBallInHand
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white active:scale-95'
-                    : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                  (isPractice || turn === "human") && !isShooting && !isBallInHand
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white active:scale-95 shadow-emerald-500/30"
+                    : "bg-slate-800 text-slate-600 cursor-not-allowed"
                 }`}
               >
-                {isShooting ? 'الكرات تتحرك... 🎱' : isBallInHand ? 'ضع الكرة باليد أولاً ✋' : (isPractice || turn === 'human') ? 'اضرب الكرة! 🚀' : 'انتظر دور الخصم...'}
+                {isShooting ? "الكرات تتحرك... 🎱" : isBallInHand ? "ضع الكرة باليد أولاً ✋" : (isPractice || turn === "human") ? "اضرب الكرة! 🚀" : "دور الخصم..."}
               </button>
-
             </div>
-
           </div>
-
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 3. MODALS (STAKE SELECT, SETTINGS, SHOP, LEADERBOARD)     */}
-      {/* ======================================================== */}
+      {/* ========================================================= */}
+      {/* SHOP & INVENTORY MODAL (20 CUES + 4 TABLES WITH STATS)   */}
+      {/* ========================================================= */}
+      {activeModal === "shop" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 md:p-6 overflow-hidden">
+          <div className="bg-[#0b121e] border-2 border-amber-500/50 rounded-3xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl relative">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/80">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🛒</span>
+                <div>
+                  <h3 className="text-lg font-black text-amber-300">متجر كيو ماستر (Shop & Inventory)</h3>
+                  <p className="text-[11px] text-slate-400">اختر وجهز أفضل العصي والطاولات الحصرية بأعلى الإحصائيات</p>
+                </div>
+              </div>
 
-      {/* Stake Selector */}
-      {activeModal === 'stake_select' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0b121e] border border-amber-500/40 rounded-3xl p-6 w-full max-w-lg relative shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-black text-amber-300 flex items-center gap-2">
-                <span>🎱</span> اختيار طاولة ومبلغ الرهان
-              </h3>
-              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white cursor-pointer text-sm font-bold">✕</button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5 bg-black/60 px-3 py-1 rounded-xl border border-amber-500/40 text-amber-400 font-black text-sm">
+                  <span>🪙</span>
+                  <span>{coins.toLocaleString()}</span>
+                </div>
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-black cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 p-1 bg-slate-900 rounded-2xl border border-slate-800">
+            {/* Shop Section Tabs */}
+            <div className="flex items-center gap-2 px-6 pt-3 pb-2 border-b border-slate-800/80 bg-slate-900/50">
               <button
-                onClick={() => setMode('8-ball')}
-                className={`py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${mode === '8-ball' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400'}`}
+                onClick={() => setShopTab("cues")}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  shopTab === "cues"
+                    ? "bg-amber-400 text-slate-950 shadow-md"
+                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                }`}
               >
-                🎱 8-Ball Pool (أمريكي)
+                <span>🎱</span>
+                <span>عصيان البلياردو (20 عصا)</span>
               </button>
               <button
-                onClick={() => setMode('snooker')}
-                className={`py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${mode === 'snooker' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400'}`}
+                onClick={() => setShopTab("tables")}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  shopTab === "tables"
+                    ? "bg-amber-400 text-slate-950 shadow-md"
+                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                }`}
               >
-                🟢 Royal Snooker (سنوكر)
+                <span>🟩</span>
+                <span>طاولات اللعب ({ALL_TABLES.length} طاولات)</span>
               </button>
             </div>
 
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {[
-                { name: 'طاولة القاهرة (Cairo)', fee: 100, win: 190, icon: '🇪🇬' },
-                { name: 'طاولة الإسكندرية (Alexandria)', fee: 500, win: 950, icon: '🌊' },
-                { name: 'طاولة دبي الذهبية (Dubai)', fee: 2500, win: 4750, icon: '🇦🇪' },
-                { name: 'طاولة لندن الملكية (London)', fee: 10000, win: 19000, icon: '🇬🇧' },
-              ].map((tbl) => (
-                <div key={tbl.fee} className="flex items-center justify-between p-3 bg-slate-950/70 border border-slate-800 rounded-2xl hover:border-amber-500/50 transition-all">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{tbl.icon}</span>
-                    <div>
-                      <div className="text-xs font-black text-white">{tbl.name}</div>
-                      <div className="text-[10px] text-amber-300 font-mono">الرهان: {tbl.fee} 🪙 • الجائزة: {tbl.win} 🪙</div>
-                    </div>
+            {/* TAB CONTENT */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+              {shopTab === "cues" ? (
+                <>
+                  {/* Category Filter Chips */}
+                  <div className="flex items-center gap-2 pb-2">
+                    <button
+                      onClick={() => setCueCategoryFilter("all")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                        cueCategoryFilter === "all" ? "bg-amber-500 text-slate-950" : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      الكل (20)
+                    </button>
+                    <button
+                      onClick={() => setCueCategoryFilter("classic")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                        cueCategoryFilter === "classic" ? "bg-amber-500 text-slate-950" : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      🌟 الفئة الاحترافية والكلاسيكية (10)
+                    </button>
+                    <button
+                      onClick={() => setCueCategoryFilter("legendary")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                        cueCategoryFilter === "legendary" ? "bg-amber-500 text-slate-950" : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      ⚡ الفئة الأسطورية وخوارق الطبيعة (10)
+                    </button>
                   </div>
-                  <button
-                    onClick={() => startMatch(mode, false, tbl.fee)}
-                    className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer active:scale-95"
-                  >
-                    العب الآن ▶
-                  </button>
+
+                  {/* Cues Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {ALL_CUES.filter((c) => cueCategoryFilter === "all" || c.category === cueCategoryFilter).map((cue) => {
+                      const isEquipped = selectedCue === cue.id;
+                      const isUnlocked = unlockedCues.includes(cue.id);
+
+                      return (
+                        <div
+                          key={cue.id}
+                          className={`relative flex flex-col justify-between p-4 rounded-2xl border transition-all ${
+                            isEquipped
+                              ? "bg-amber-500/10 border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.25)]"
+                              : "bg-slate-950/70 border-slate-800 hover:border-slate-700"
+                          }`}
+                        >
+                          {/* Cue Image Showcase */}
+                          <div className="w-full h-12 bg-slate-900/90 rounded-xl overflow-hidden flex items-center justify-center p-1 border border-slate-800/80 mb-3">
+                            <img src={cue.image} alt={cue.nameAr} className="max-h-full object-contain filter drop-shadow-md" />
+                          </div>
+
+                          {/* Cue Title & Category Badge */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <div className="text-sm font-black text-white">{cue.nameAr}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{cue.nameEn}</div>
+                            </div>
+                            <span
+                              className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                cue.category === "legendary"
+                                  ? "bg-fuchsia-950 text-fuchsia-300 border border-fuchsia-500/50"
+                                  : "bg-amber-950 text-amber-300 border border-amber-500/50"
+                              }`}
+                            >
+                              {cue.category === "legendary" ? "⚡ أسطورية" : "🌟 احترافية"}
+                            </span>
+                          </div>
+
+                          {/* 4 Stats Bars */}
+                          <div className="grid grid-cols-2 gap-2 my-2 text-[10px]">
+                            {/* Force */}
+                            <div>
+                              <div className="flex justify-between text-slate-400 mb-0.5">
+                                <span>💥 القوة:</span>
+                                <span className="font-bold text-amber-400">{cue.stats.force}/10</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full" style={{ width: `${(cue.stats.force / 10) * 100}%` }} />
+                              </div>
+                            </div>
+
+                            {/* Aim */}
+                            <div>
+                              <div className="flex justify-between text-slate-400 mb-0.5">
+                                <span>🎯 التوجيه:</span>
+                                <span className="font-bold text-cyan-400">{cue.stats.aim}/10</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full" style={{ width: `${(cue.stats.aim / 10) * 100}%` }} />
+                              </div>
+                            </div>
+
+                            {/* Spin */}
+                            <div>
+                              <div className="flex justify-between text-slate-400 mb-0.5">
+                                <span>🌀 الدوران:</span>
+                                <span className="font-bold text-purple-400">{cue.stats.spin}/10</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-fuchsia-500 to-purple-400 rounded-full" style={{ width: `${(cue.stats.spin / 10) * 100}%` }} />
+                              </div>
+                            </div>
+
+                            {/* Time */}
+                            <div>
+                              <div className="flex justify-between text-slate-400 mb-0.5">
+                                <span>⏱️ الوقت:</span>
+                                <span className="font-bold text-emerald-400">{cue.stats.time}ث</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-teal-500 to-emerald-400 rounded-full" style={{ width: `${(cue.stats.time / 50) * 100}%` }} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Special Perk */}
+                          <div className="text-[10px] text-amber-200/90 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 mb-3">
+                            {cue.specialPerkAr}
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="text-xs font-black text-amber-400">
+                              {cue.price === 0 ? "مجانية" : `${cue.price.toLocaleString()} 🪙`}
+                            </div>
+                            <button
+                              onClick={() => (isUnlocked ? handleEquipCue(cue.id) : handleBuyCue(cue))}
+                              className={`px-4 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow ${
+                                isEquipped
+                                  ? "bg-emerald-500 text-slate-950 font-bold"
+                                  : isUnlocked
+                                  ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+                                  : coins >= cue.price
+                                  ? "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
+                                  : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                              }`}
+                            >
+                              {isEquipped ? "✅ مجهزة حالياً" : isUnlocked ? "تجهيز العصا" : `شراء 🪙`}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                /* TABLES TAB */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {ALL_TABLES.map((table) => {
+                      const isEquipped = selectedTable === table.id;
+                      const isUnlocked = unlockedTables.includes(table.id);
+
+                      return (
+                        <div
+                          key={table.id}
+                          className={`relative flex flex-col justify-between p-4 rounded-2xl border transition-all ${
+                            isEquipped
+                              ? "bg-amber-500/10 border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.25)]"
+                              : "bg-slate-950/70 border-slate-800 hover:border-slate-700"
+                          }`}
+                        >
+                          {/* Table Image or Felt Preview */}
+                          <div className="w-full h-32 rounded-xl overflow-hidden border border-slate-800 relative bg-slate-900 mb-3">
+                            {table.image ? (
+                              <img src={table.image} alt={table.nameAr} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-[#15803d]">
+                                <span className="text-white font-black text-sm drop-shadow">قماش صوف ميرينو الأخضر</span>
+                              </div>
+                            )}
+                            <div className="absolute bottom-2 right-2 bg-black/75 px-2 py-0.5 rounded text-[10px] text-amber-300 font-bold">
+                              {table.cushionGlow}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mb-1">
+                            <h4 className="text-sm font-black text-white">{table.nameAr}</h4>
+                            <span className="text-xs font-black text-amber-400">
+                              {table.price === 0 ? "مجانية" : `${table.price.toLocaleString()} 🪙`}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-slate-400 mb-2">{table.descriptionAr}</p>
+
+                          <div className="flex items-center justify-between text-[10px] text-slate-300 bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-slate-800 mb-3">
+                            <span>انزلاق السطح: {table.friction > 0.985 ? "سريع ناعم ❄️" : "قياسي متزن 🟢"}</span>
+                            <span>ارتداد الباند: {table.bounceRestitution > 0.86 ? "انفجاري قوي 🔥" : "قياسي دولي 🎱"}</span>
+                          </div>
+
+                          <button
+                            onClick={() => (isUnlocked ? handleEquipTable(table.id) : handleBuyTable(table))}
+                            className={`w-full py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow ${
+                              isEquipped
+                                ? "bg-emerald-500 text-slate-950 font-bold"
+                                : isUnlocked
+                                ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+                                : coins >= table.price
+                                ? "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white"
+                                : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                            }`}
+                          >
+                            {isEquipped ? "✅ الطاولة المجهزة حالياً" : isUnlocked ? "تجهيز هذه الطاولة" : `شراء الطاولة 🪙 ${table.price.toLocaleString()}`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Teaser Banner for Future Tables */}
+                  <div className="bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+                    <span className="text-lg">⏳</span>
+                    <h5 className="text-xs font-black text-amber-300 mt-1">المزيد من الطاولات والساحات قادمة في التحديثات القادمة!</h5>
+                    <p className="text-[10px] text-slate-400">طاولات النيون الفضائية، طاولات الصالونات العتيقة، وطاولات التحديات الاحترافية.</p>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Tournaments Modal */}
-      {activeModal === 'tournaments' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0b121e] border border-amber-500/40 rounded-3xl p-6 w-full max-w-xl relative shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-black text-amber-300 flex items-center gap-2">
-                <span>🏆</span> بطولات كيو ماستر الإقصائية (8 Players)
-              </h3>
-              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
-            </div>
-
-            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs text-amber-200">
-              نظام خروج المغلوب من 3 أدوار (ربع النهائي ⬅️ نصف النهائي ⬅️ النهائي الكبير).
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[
-                { title: 'كأس القاهرة المفتوح', fee: 500, prize: 3500 },
-                { title: 'بطولة دبي الدولية', fee: 2000, prize: 14000 },
-              ].map((tourn) => (
-                <div key={tourn.title} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col justify-between gap-3">
-                  <div>
-                    <h4 className="font-black text-sm text-white">{tourn.title}</h4>
-                    <p className="text-[11px] text-amber-300 mt-1">الدخول: {tourn.fee} 🪙 • الجائزة الكبرى: {tourn.prize} 🪙</p>
-                  </div>
-                  <button
-                    onClick={() => startMatch('8-ball', false, tourn.fee)}
-                    className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer"
-                  >
-                    دخول البطولة ⚔️
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Shop Modal */}
-      {activeModal === 'shop' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0b121e] border border-amber-500/40 rounded-3xl p-6 w-full max-w-md relative shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-black text-amber-300 flex items-center gap-2">
-                <span>🛒</span> متجر عصي البلياردو (Cue Sticks)
-              </h3>
-              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
-            </div>
-
-            <div className="space-y-3">
-              {[
-                { id: 'classic', name: 'عصا الخشب الكلاسيكية', color: '#d97706', cost: 'مملوكة' },
-                { id: 'dragon', name: 'عصا التنين الناري', color: '#dc2626', cost: '5,000 🪙' },
-                { id: 'neon', name: 'عصا النيون السيبرانية', color: '#06b6d4', cost: '15,000 🪙' },
-                { id: 'gold', name: 'عصا الفراعنة الذهبية', color: '#fbbf24', cost: '50,000 🪙' },
-              ].map((c) => (
-                <div key={c.id} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${selectedCue === c.id ? 'bg-amber-500/10 border-amber-400' : 'bg-slate-950 border-slate-800'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-                    <span className="text-xs font-black text-white">{c.name}</span>
-                  </div>
-                  <button
-                    onClick={() => setSelectedCue(c.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer ${selectedCue === c.id ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-300'}`}
-                  >
-                    {selectedCue === c.id ? 'مجهزة ✓' : c.cost}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Settings Modal */}
-      {activeModal === 'settings' && (
+      {/* ========================================================= */}
+      {/* SETTINGS MODAL                                            */}
+      {/* ========================================================= */}
+      {activeModal === "settings" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-[#0b121e] border border-slate-700 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
@@ -1940,9 +2102,9 @@ function CueMasterApp() {
                 <span>المؤثرات الصوتية:</span>
                 <button
                   onClick={() => setSoundEnabled(!soundEnabled)}
-                  className={`px-3 py-1.5 rounded-xl text-xs cursor-pointer ${soundEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                  className={`px-3 py-1.5 rounded-xl text-xs cursor-pointer ${soundEnabled ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400"}`}
                 >
-                  {soundEnabled ? 'مفعل 🔊' : 'مكتوم 🔇'}
+                  {soundEnabled ? "مفعل 🔊" : "مكتوم 🔇"}
                 </button>
               </div>
 
@@ -1950,47 +2112,69 @@ function CueMasterApp() {
                 <span>خط التوجيه المساعد:</span>
                 <button
                   onClick={() => setAimAssistLong(!aimAssistLong)}
-                  className={`px-3 py-1.5 rounded-xl text-xs cursor-pointer ${aimAssistLong ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                  className={`px-3 py-1.5 rounded-xl text-xs cursor-pointer ${aimAssistLong ? "bg-amber-500 text-slate-950" : "bg-slate-800 text-slate-400"}`}
                 >
-                  {aimAssistLong ? 'طويل (Pro)' : 'قصير'}
+                  {aimAssistLong ? "متقدم (طويل)" : "قياسي"}
                 </button>
               </div>
 
-              <div>
-                <span className="block mb-2">لون قماش الطاولة:</span>
-                <div className="flex gap-2">
-                  <button onClick={() => setFeltColor('green')} className={`flex-1 py-1.5 rounded-xl text-[11px] ${feltColor === 'green' ? 'bg-green-700 text-white' : 'bg-slate-800'}`}>أخضر</button>
-                  <button onClick={() => setFeltColor('blue')} className={`flex-1 py-1.5 rounded-xl text-[11px] ${feltColor === 'blue' ? 'bg-blue-700 text-white' : 'bg-slate-800'}`}>أزرق</button>
-                  <button onClick={() => setFeltColor('snooker')} className={`flex-1 py-1.5 rounded-xl text-[11px] ${feltColor === 'snooker' ? 'bg-emerald-800 text-white' : 'bg-slate-800'}`}>سنوكر</button>
-                </div>
+              <div className="flex items-center justify-between">
+                <span>الطاولة الحالية:</span>
+                <span className="text-amber-400 font-bold">{currentTable.nameAr}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span>العصا الحالية:</span>
+                <span className="text-cyan-400 font-bold">{activeCue.nameAr}</span>
               </div>
             </div>
+
+            <button
+              onClick={() => { setActiveModal("shop"); }}
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer shadow"
+            >
+              فتح المتجر لتعديل العصا والطاولة 🛒
+            </button>
           </div>
         </div>
       )}
 
-      {/* Leaderboard Modal */}
-      {activeModal === 'leaderboard' && (
+      {/* ========================================================= */}
+      {/* TOURNAMENTS MODAL                                         */}
+      {/* ========================================================= */}
+      {activeModal === "tournaments" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-[#0b121e] border border-amber-500/40 rounded-3xl p-6 w-full max-w-md relative shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-black text-amber-300">🏆 صدارة ملوك كيو ماستر</h3>
+              <h3 className="text-base font-black text-amber-300 flex items-center gap-2">
+                <span>🏆</span> بطولات كيو ماستر الكبرى
+              </h3>
               <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               {[
-                { rank: 1, name: 'فخر_العرب_8BP', coins: '1,450,000 🪙', badge: '🥇' },
-                { rank: 2, name: 'سلطان_السنوكر', coins: '980,000 🪙', badge: '🥈' },
-                { rank: 3, name: 'كايزن_بلياردو', coins: '720,000 🪙', badge: '🥉' },
-                { rank: 4, name: username, coins: `${coins.toLocaleString()} 🪙`, badge: '⭐ أنت' },
-              ].map((p) => (
-                <div key={p.rank} className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-2xl text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-amber-400">{p.badge}</span>
-                    <span className="font-bold text-white">{p.name}</span>
+                { name: "بطولة القاهرة المفتوحة", entry: 500, prize: 3500, players: "8 لاعبين", icon: "🇪🇬" },
+                { name: "كأس دبي للمحترفين", entry: 2500, prize: 18000, players: "16 لاعب", icon: "🇦🇪" },
+                { name: "ماسترز لندن العالمية", entry: 10000, prize: 75000, players: "32 لاعب", icon: "🇬🇧" },
+              ].map((t, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{t.icon}</span>
+                    <div>
+                      <div className="text-xs font-black text-white">{t.name}</div>
+                      <div className="text-[10px] text-slate-400">الجائزة: {t.prize.toLocaleString()} 🪙 | {t.players}</div>
+                    </div>
                   </div>
-                  <span className="text-amber-300 font-mono font-bold">{p.coins}</span>
+                  <button
+                    onClick={() => {
+                      setActiveModal(null);
+                      startMatch("8-ball", false, t.entry);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow"
+                  >
+                    دخول {t.entry} 🪙
+                  </button>
                 </div>
               ))}
             </div>
@@ -1998,6 +2182,105 @@ function CueMasterApp() {
         </div>
       )}
 
+      {/* ========================================================= */}
+      {/* STAKE SELECT MODAL                                        */}
+      {/* ========================================================= */}
+      {activeModal === "stake_select" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#0b121e] border border-amber-500/40 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-amber-300">اختر طاولة اللعب والرهان</h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
+            </div>
+
+            <div className="space-y-2.5">
+              {[
+                { name: "طاولة المبتدئين (الصالون)", stake: 100, prize: 190 },
+                { name: "طاولة الهواة (النادي)", stake: 500, prize: 950 },
+                { name: "طاولة المحترفين (VIP)", stake: 2500, prize: 4750 },
+                { name: "طاولة الملوك (High Roller)", stake: 10000, prize: 19000 },
+              ].map((st, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setActiveModal(null);
+                    startMatch("8-ball", false, st.stake);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-400/50 transition-all cursor-pointer"
+                >
+                  <div className="text-right">
+                    <div className="text-xs font-black text-white">{st.name}</div>
+                    <div className="text-[10px] text-amber-400">الجائزة: {st.prize.toLocaleString()} 🪙</div>
+                  </div>
+                  <span className="text-xs font-black text-emerald-400">{st.stake.toLocaleString()} 🪙</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* LEADERBOARD MODAL                                         */}
+      {/* ========================================================= */}
+      {activeModal === "leaderboard" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#0b121e] border border-slate-700 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <span>🏆</span> قائمة المتصدرين (Leaderboard)
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
+            </div>
+
+            <div className="space-y-2">
+              {[
+                { rank: "🥇 1", name: "الكابتن_ماجد", coins: "2,450,000", flag: "🇪🇬" },
+                { rank: "🥈 2", name: "البرنس_السعودي", coins: "1,890,000", flag: "🇸🇦" },
+                { rank: "🥉 3", name: "صقر_الخليج", coins: "1,220,000", flag: "🇦🇪" },
+                { rank: "4", name: username, coins: coins.toLocaleString(), flag: "⭐" },
+              ].map((p, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-amber-400">{p.rank}</span>
+                    <span className="font-black text-white">{p.name}</span>
+                    <span>{p.flag}</span>
+                  </div>
+                  <span className="font-mono text-amber-300 font-bold">{p.coins} 🪙</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* GAME OVER MODAL                                           */}
+      {/* ========================================================= */}
+      {gameOver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="bg-slate-900 border-2 border-amber-500/60 rounded-3xl p-6 w-full max-w-md text-center shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="text-4xl">{gameOver.includes("مبروك") || gameOver.includes("فزت") ? "🏆" : "❌"}</div>
+            <h3 className="text-xl font-black text-amber-300">نهاية المباراة!</h3>
+            <p className="text-sm font-bold text-slate-200 leading-relaxed">{gameOver}</p>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => startMatch(mode, isPractice, stake)}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs cursor-pointer shadow-lg active:scale-95"
+              >
+                مباراة جديدة 🔄
+              </button>
+              <button
+                onClick={() => setCurrentView("menu")}
+                className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-xs cursor-pointer active:scale-95"
+              >
+                القائمة الرئيسية 🏠
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
