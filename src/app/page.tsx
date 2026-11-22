@@ -286,13 +286,14 @@ function CueMasterApp() {
   const BALL_RADIUS = 12;
 
   // 6 Official Table Pockets with Realistic Drop Throat Coordinates
+  // 6 Calibrated Table Pockets (Exact mouth of the black holes)
   const pockets: Pocket[] = [
-    { id: 0, name: "أعلى يسار", x: CUSHION + 4, y: CUSHION + 4 },
-    { id: 1, name: "أعلى وسط", x: TABLE_WIDTH / 2, y: CUSHION - 4 },
-    { id: 2, name: "أعلى يمين", x: TABLE_WIDTH - CUSHION - 4, y: CUSHION + 4 },
-    { id: 3, name: "أسفل يسار", x: CUSHION + 4, y: TABLE_HEIGHT - CUSHION - 4 },
-    { id: 4, name: "أسفل وسط", x: TABLE_WIDTH / 2, y: TABLE_HEIGHT - CUSHION + 4 },
-    { id: 5, name: "أسفل يمين", x: TABLE_WIDTH - CUSHION - 4, y: TABLE_HEIGHT - CUSHION - 4 },
+    { id: 0, name: "أعلى يسار", x: 56, y: 56 },
+    { id: 1, name: "أعلى وسط", x: 450, y: 38 },
+    { id: 2, name: "أعلى يمين", x: 844, y: 56 },
+    { id: 3, name: "أسفل يسار", x: 56, y: 394 },
+    { id: 4, name: "أسفل وسط", x: 450, y: 412 },
+    { id: 5, name: "أسفل يمين", x: 844, y: 394 },
   ];
 
   // Preload Storage & Assets
@@ -386,9 +387,9 @@ function CueMasterApp() {
   // Initialize Rack with Official Standard 8-Ball Positions
   const initBalls = (currentMode: "8-ball" | "snooker") => {
     const balls: Ball[] = [];
-    const tableLeft = CUSHION;
-    const tableRight = TABLE_WIDTH - CUSHION;
-    const centerY = TABLE_HEIGHT / 2;
+    const tableLeft = 61;
+    const tableRight = 839;
+    const centerY = 222;
 
     // 1. White Cue Ball
     balls.push({
@@ -636,61 +637,39 @@ function CueMasterApp() {
           const speed = Math.hypot(ball.vx, ball.vy);
           if (speed > 0.08) anyMoving = true;
 
-          // Realistic Cushion Segments (Bouncing happens strictly on cushion rails between pockets)
-          const r = ball.radius;
-          const leftBound = CUSHION + r;
-          const rightBound = TABLE_WIDTH - CUSHION - r;
-          const topBound = CUSHION + r;
-          const bottomBound = TABLE_HEIGHT - CUSHION - r;
-
-          // Top Cushions (two segments: left of center pocket, right of center pocket)
-          if (ball.y < topBound && ((ball.x > 56 && ball.x < 424) || (ball.x > 476 && ball.x < 844))) {
-            ball.y = topBound;
-            ball.vy = -ball.vy * CUSHION_BOUNCE;
-            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          // High-Elasticity Rubber Cushion Rails (Balls stay strictly inside the green cloth)
+          // Top Cushions (two segments: left of middle pocket, right of middle pocket)
+          if (ball.y < 50 && ((ball.x > 78 && ball.x < 422) || (ball.x > 478 && ball.x < 822))) {
+            ball.y = 50;
+            ball.vy = Math.abs(ball.vy) * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.0) playBallClack(speed);
           }
           // Bottom Cushions
-          if (ball.y > bottomBound && ((ball.x > 56 && ball.x < 424) || (ball.x > 476 && ball.x < 844))) {
-            ball.y = bottomBound;
-            ball.vy = -ball.vy * CUSHION_BOUNCE;
-            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          if (ball.y > 394 && ((ball.x > 78 && ball.x < 422) || (ball.x > 478 && ball.x < 822))) {
+            ball.y = 394;
+            ball.vy = -Math.abs(ball.vy) * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.0) playBallClack(speed);
           }
           // Left Cushion
-          if (ball.x < leftBound && (ball.y > 56 && ball.y < 394)) {
-            ball.x = leftBound;
-            ball.vx = -ball.vx * CUSHION_BOUNCE;
-            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          if (ball.x < 61 && (ball.y > 78 && ball.y < 366)) {
+            ball.x = 61;
+            ball.vx = Math.abs(ball.vx) * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.0) playBallClack(speed);
           }
           // Right Cushion
-          if (ball.x > rightBound && (ball.y > 56 && ball.y < 394)) {
-            ball.x = rightBound;
-            ball.vx = -ball.vx * CUSHION_BOUNCE;
-            if (soundEnabled && speed > 1.2) playBallClack(speed);
+          if (ball.x > 839 && (ball.y > 78 && ball.y < 366)) {
+            ball.x = 839;
+            ball.vx = -Math.abs(ball.vx) * CUSHION_BOUNCE;
+            if (soundEnabled && speed > 1.0) playBallClack(speed);
           }
 
-          // Outer table safety catch (behind pocket pockets)
-          if (ball.x < 12 || ball.x > TABLE_WIDTH - 12 || ball.y < 12 || ball.y > TABLE_HEIGHT - 12) {
-            const nearestP = pockets.reduce((prev, curr) => Math.hypot(curr.x - ball.x, curr.y - ball.y) < Math.hypot(prev.x - ball.x, prev.y - ball.y) ? curr : prev);
-            ball.isPotted = true;
-            ball.vx = 0;
-            ball.vy = 0;
-            if (soundEnabled) playPocketDrop();
-            if (ball.type === "cue") cueScratchedInShotRef.current = true;
-            else pottedInCurrentShotRef.current.push({ ball, pocketId: nearestP.id });
-            return;
-          }
-
-          // Exact Pocket Drop Detection (Mouth ~1.5 balls wide)
+          // Exact Pocket Drop Detection (Mouth of the black holes ~1.5 balls)
           pockets.forEach((p) => {
             const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
             const isSide = (p.id === 1 || p.id === 4);
-            const dropLimit = isSide ? 16 : 18;
+            const dropLimit = isSide ? 18 : 22;
 
             if (dist < dropLimit) {
-              if (isSide) {
-                const inMouthX = ball.x > 428 && ball.x < 472;
-                if (!inMouthX) return;
-              }
               ball.isPotted = true;
               ball.vx = 0;
               ball.vy = 0;
@@ -703,6 +682,17 @@ function CueMasterApp() {
               }
             }
           });
+
+          // Outer table safety catch (if a ball rolls behind a pocket)
+          if (ball.x < 36 || ball.x > TABLE_WIDTH - 36 || ball.y < 28 || ball.y > TABLE_HEIGHT - 28) {
+            const nearestP = pockets.reduce((prev, curr) => Math.hypot(curr.x - ball.x, curr.y - ball.y) < Math.hypot(prev.x - ball.x, prev.y - ball.y) ? curr : prev);
+            ball.isPotted = true;
+            ball.vx = 0;
+            ball.vy = 0;
+            if (soundEnabled) playPocketDrop();
+            if (ball.type === "cue") cueScratchedInShotRef.current = true;
+            else pottedInCurrentShotRef.current.push({ ball, pocketId: nearestP.id });
+          }
         });
 
         // 2. Ball-to-Ball Elastic Collisions (High-precision sub-stepping eliminates penetration & sideways deflection)
@@ -1050,31 +1040,30 @@ function CueMasterApp() {
         ctx.stroke();
       }
 
-      // 2. Pockets & Target Call Pocket Highlight
+      // 2. Pocket Target Call Highlight (Positioned exactly at the mouth of the black hole)
       pockets.forEach((p) => {
         const isTarget = calledPocketId === p.id;
 
-        ctx.fillStyle = "rgba(2, 6, 12, 0.85)";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = isTarget ? "#eab308" : tableCfg.cushionGlow;
-        ctx.lineWidth = isTarget ? 3.5 : 1.5;
-        ctx.stroke();
-
         if (isTarget) {
-          ctx.strokeStyle = "rgba(234, 179, 8, 0.9)";
+          // Glowing Target Indicator over the called pocket opening
+          ctx.strokeStyle = "#eab308";
+          ctx.lineWidth = 3;
           ctx.setLineDash([4, 4]);
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 28, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
+
+          // Soft golden aura
+          ctx.fillStyle = "rgba(234, 179, 8, 0.25)";
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 20, 0, Math.PI * 2);
+          ctx.fill();
 
           ctx.fillStyle = "#eab308";
           ctx.font = "bold 10px sans-serif";
           ctx.textAlign = "center";
-          ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 38 : -30));
+          ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 36 : -26));
         }
       });
 
@@ -1425,10 +1414,10 @@ function CueMasterApp() {
 
     // Ball in Hand placement
     if (isBallInHand) {
-      const minX = CUSHION + BALL_RADIUS + 5;
-      const maxX = TABLE_WIDTH - CUSHION - BALL_RADIUS - 5;
-      const minY = CUSHION + BALL_RADIUS + 5;
-      const maxY = TABLE_HEIGHT - CUSHION - BALL_RADIUS - 5;
+      const minX = 66;
+      const maxX = 834;
+      const minY = 55;
+      const maxY = 389;
 
       const clampedX = Math.min(maxX, Math.max(minX, mouseX));
       const clampedY = Math.min(maxY, Math.max(minY, mouseY));
