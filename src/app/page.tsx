@@ -174,6 +174,35 @@ function playSuccessChime() {
   });
 }
 
+// Cinematic Slow-Motion Pocket Cam Sound
+function playCinematicWhoosh() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(160, t);
+  osc.frequency.exponentialRampToValueAtTime(42, t + 0.9);
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(420, t);
+  filter.frequency.exponentialRampToValueAtTime(75, t + 0.9);
+
+  gain.gain.setValueAtTime(0.001, t);
+  gain.gain.linearRampToValueAtTime(0.45, t + 0.15);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(t);
+  osc.stop(t + 0.9);
+}
+
 // Official 8-Ball Ball Mapping
 const BALL_CONFIG_MAP: Record<number, { color: string; type: "solid" | "stripe" | "black"; nameAr: string }> = {
   1: { color: "#facc15", type: "solid", nameAr: "صفراء سادة (1)" },
@@ -260,6 +289,22 @@ function CueMasterApp() {
   const [aimAngle, setAimAngle] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
   const [gameOver, setGameOver] = useState<string | null>(null);
+
+  // Cinematic Pocket Cam (لقطة سينمائية بطيئة وأفقية مقربة عند إسقاط الكرات عبر مسافة طويلة)
+  const [cinematicCam, setCinematicCam] = useState<{
+    active: boolean;
+    pocket: Pocket;
+    ballNum: number;
+    ballColor: string;
+  } | null>(null);
+  const cinematicCamRef = useRef<{
+    active: boolean;
+    pocket: Pocket;
+    ballNum: number;
+    ballColor: string;
+  } | null>(null);
+  const cinematicTriggeredThisShotRef = useRef<boolean>(false);
+  const shotStartPosRef = useRef<{ x: number; y: number }>({ x: 200, y: 225 });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ballsRef = useRef<Ball[]>([]);
@@ -622,16 +667,17 @@ function CueMasterApp() {
 
       const cueActive = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
       const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
+      const timeScale = cinematicCamRef.current ? 0.35 : 1.0;
 
       for (let step = 0; step < SUB_STEPS; step++) {
         // 1. Move Balls & Resolve Cushions / Pocket Drops per Sub-step
         balls.forEach((ball) => {
           if (ball.isPotted) return;
 
-          ball.x += ball.vx / SUB_STEPS;
-          ball.y += ball.vy / SUB_STEPS;
-          ball.vx *= subFriction;
-          ball.vy *= subFriction;
+          ball.x += (ball.vx * timeScale) / SUB_STEPS;
+          ball.y += (ball.vy * timeScale) / SUB_STEPS;
+          ball.vx *= Math.pow(subFriction, timeScale);
+          ball.vy *= Math.pow(subFriction, timeScale);
 
           const speed = Math.hypot(ball.vx, ball.vy);
           if (speed > 0.08) anyMoving = true;
@@ -670,9 +716,34 @@ function CueMasterApp() {
 
             // Inward funnel suction towards pocket mouth
             if (dist < 30 && dist > 0.5) {
-              const pull = 0.45 * (1 - dist / 30);
+              const pull = 0.45 * (1 - dist / 30) * timeScale;
               ball.vx += (dx / dist) * pull;
               ball.vy += (dy / dist) * pull;
+            }
+
+            // TRIGGER CINEMATIC POCKET DROP CAM:
+            // When a legal ball is heading into the called target pocket across a long distance or is 8-ball!
+            const isCalledTargetPocket = activeShotCalledPocketRef.current !== null && p.id === activeShotCalledPocketRef.current;
+            if (
+              !cinematicTriggeredThisShotRef.current &&
+              dist < 38 &&
+              dist > 14 &&
+              (isCalledTargetPocket || ball.number === 8) &&
+              ball.type !== "cue"
+            ) {
+              const shotDist = Math.hypot(shotStartPosRef.current.x - p.x, shotStartPosRef.current.y - p.y);
+              if (shotDist > 270 || ball.number === 8) {
+                cinematicTriggeredThisShotRef.current = true;
+                const camData = {
+                  active: true,
+                  pocket: p,
+                  ballNum: ball.number,
+                  ballColor: ball.color,
+                };
+                cinematicCamRef.current = camData;
+                setCinematicCam(camData);
+                if (soundEnabled) playCinematicWhoosh();
+              }
             }
 
             if (dist < 22) {
@@ -806,6 +877,14 @@ function CueMasterApp() {
       // 3. Handle Shot Completion & Official 8-Ball Rules Judgment
       if (isShooting && !anyMoving) {
         setIsShooting(false);
+        if (cinematicCamRef.current) {
+          setTimeout(() => {
+            cinematicCamRef.current = null;
+            setCinematicCam(null);
+          }, 1100);
+        } else {
+          setCinematicCam(null);
+        }
 
         const pottedList = pottedInCurrentShotRef.current;
         const cueScratched = cueScratchedInShotRef.current;
@@ -1494,6 +1573,8 @@ function CueMasterApp() {
     activeShotCalledPocketRef.current = calledPocketId;
     activeShotAimAngleRef.current = aimAngle;
     spinAppliedInCurrentShotRef.current = false;
+    shotStartPosRef.current = { x: cueBall.x, y: cueBall.y };
+    cinematicTriggeredThisShotRef.current = false;
 
     setIsShooting(true);
     if (soundEnabled) playCueStrike(power);
@@ -1546,6 +1627,8 @@ function CueMasterApp() {
           setAimAngle(targetAngle);
           activeShotAimAngleRef.current = targetAngle;
           spinAppliedInCurrentShotRef.current = false;
+          shotStartPosRef.current = { x: cueBall.x, y: cueBall.y };
+          cinematicTriggeredThisShotRef.current = false;
 
           setIsShooting(true);
           if (soundEnabled) playCueStrike(65);
@@ -1869,7 +1952,15 @@ function CueMasterApp() {
                 🛒
               </button>
               <button
-                onClick={() => setCurrentView("menu")}
+                onClick={() => {
+                  setGameOver(null);
+                  setCurrentView("menu");
+                  try {
+                    if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+                      window.parent.postMessage({ type: "CLOSE_GAME" }, "*");
+                    }
+                  } catch {}
+                }}
                 className="w-9 h-9 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/50 flex items-center justify-center text-rose-300 font-black text-xs cursor-pointer"
                 title="خروج للقائمة الرئيسية"
               >
@@ -1888,23 +1979,66 @@ function CueMasterApp() {
             </div>
           )}
 
-          {/* Billiards Canvas Viewport */}
-          <div className="relative flex-1 flex items-center justify-center my-2">
-            <canvas
-              ref={canvasRef}
-              width={TABLE_WIDTH}
-              height={TABLE_HEIGHT}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseDown={handleCanvasMouseDown}
-              onMouseUp={handleCanvasMouseUp}
+          {/* Billiards Canvas Viewport with Dynamic 3D Cinematic Perspective */}
+          <div className="relative flex-1 flex items-center justify-center my-2 overflow-hidden rounded-2xl w-full">
+            {/* Cinematic Letterbox Overlays */}
+            {cinematicCam && (
+              <>
+                {/* Top Film Bar */}
+                <div className="absolute top-0 left-0 right-0 z-30 h-11 bg-black/95 border-b border-amber-500/40 flex items-center justify-between px-6 shadow-2xl animate-in slide-in-from-top duration-300">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
+                    <span className="text-[11px] font-black text-red-500 tracking-wider">🔴 REC | لقطة سينمائية بطيئة</span>
+                  </div>
+                  <div className="text-xs font-black text-amber-300 tracking-widest uppercase">
+                    🎬 CINEMATIC POCKET CAM
+                  </div>
+                  <div className="text-[11px] font-bold text-slate-300">
+                    جيب: {cinematicCam.pocket.name}
+                  </div>
+                </div>
+
+                {/* Bottom Film Bar */}
+                <div className="absolute bottom-0 left-0 right-0 z-30 h-11 bg-black/95 border-t border-amber-500/40 flex items-center justify-between px-6 shadow-2xl animate-in slide-in-from-bottom duration-300">
+                  <div className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
+                    <span>🎯</span>
+                    <span>تصويب استثنائي عبر مسافة طويلة | SLOW MOTION 0.35x</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-amber-400 font-extrabold">
+                    {cinematicCam.ballNum === 8 ? "🏆 الكرة السوداء الحاسمة!" : `كرة رقم (${cinematicCam.ballNum})`}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div
+              className="w-full flex items-center justify-center transition-all duration-700 ease-out"
               style={{
-                borderColor: currentTable.cushionGlow,
-                boxShadow: `0 0 35px ${currentTable.cushionGlow}33, 0 10px 40px rgba(0,0,0,0.8)`
+                perspective: "900px",
+                transformOrigin: cinematicCam
+                  ? `${(cinematicCam.pocket.x / TABLE_WIDTH) * 100}% ${(cinematicCam.pocket.y / TABLE_HEIGHT) * 100}%`
+                  : "50% 50%",
+                transform: cinematicCam
+                  ? `scale(2.25) rotateX(${cinematicCam.pocket.y < TABLE_HEIGHT / 2 ? "-42deg" : "42deg"})`
+                  : "scale(1) rotateX(0deg)",
               }}
-              className={`w-full max-h-[68vh] object-contain rounded-2xl border-4 ${
-                isBallInHand ? "cursor-grab" : isDraggingCueStick ? "cursor-grabbing" : "cursor-crosshair"
-              }`}
-            />
+            >
+              <canvas
+                ref={canvasRef}
+                width={TABLE_WIDTH}
+                height={TABLE_HEIGHT}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseUp={handleCanvasMouseUp}
+                style={{
+                  borderColor: currentTable.cushionGlow,
+                  boxShadow: `0 0 35px ${currentTable.cushionGlow}33, 0 10px 40px rgba(0,0,0,0.8)`
+                }}
+                className={`w-full max-h-[68vh] object-contain rounded-2xl border-4 ${
+                  isBallInHand ? "cursor-grab" : isDraggingCueStick ? "cursor-grabbing" : "cursor-crosshair"
+                }`}
+              />
+            </div>
           </div>
 
           {/* Bottom Table Controls Bar */}
@@ -2449,13 +2583,24 @@ function CueMasterApp() {
 
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
-                onClick={() => startMatch(mode, isPractice, stake)}
+                onClick={() => {
+                  setGameOver(null);
+                  startMatch(mode, isPractice, stake);
+                }}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs cursor-pointer shadow-lg active:scale-95"
               >
                 مباراة جديدة 🔄
               </button>
               <button
-                onClick={() => setCurrentView("menu")}
+                onClick={() => {
+                  setGameOver(null);
+                  setCurrentView("menu");
+                  try {
+                    if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+                      window.parent.postMessage({ type: "CLOSE_GAME" }, "*");
+                    }
+                  } catch {}
+                }}
                 className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-xs cursor-pointer active:scale-95"
               >
                 القائمة الرئيسية 🏠
