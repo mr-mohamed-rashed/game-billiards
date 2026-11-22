@@ -58,7 +58,7 @@ function playBallClack(relativeSpeed: number) {
   const ctx = getAudioContext();
   if (!ctx) return;
   const t = ctx.currentTime;
-  const vol = Math.min(1, Math.max(0.12, relativeSpeed / 12));
+  const vol = Math.min(1, Math.max(0.15, relativeSpeed / 12));
 
   // High-Frequency Aramith click
   const osc1 = ctx.createOscillator();
@@ -196,7 +196,12 @@ function CueMasterApp() {
   const [botGroup, setBotGroup] = useState<'unassigned' | 'solids' | 'stripes'>('unassigned');
   const [groupAnnouncement, setGroupAnnouncement] = useState<{ title: string; human: string; bot: string } | null>(null);
 
+  // Call Pocket
   const [calledPocketId, setCalledPocketId] = useState<number | null>(0);
+  const activeShotCalledPocketRef = useRef<number | null>(0); // Snapshot when shot was fired!
+  const activeShotAimAngleRef = useRef<number>(0);
+  const spinAppliedInCurrentShotRef = useRef<boolean>(false);
+
   const [isBallInHand, setIsBallInHand] = useState(false);
   const [ballInHandHoverPos, setBallInHandHoverPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -452,6 +457,7 @@ function CueMasterApp() {
 
     const FRICTION = 0.985;
     const POCKET_RADIUS = 24;
+    const MAX_SPEED = 28;
 
     const updatePhysics = () => {
       const balls = ballsRef.current;
@@ -461,18 +467,28 @@ function CueMasterApp() {
       balls.forEach((ball) => {
         if (ball.isPotted) return;
 
+        // Apply Velocity & Friction
         ball.x += ball.vx;
         ball.y += ball.vy;
         ball.vx *= FRICTION;
         ball.vy *= FRICTION;
 
-        if (Math.hypot(ball.vx, ball.vy) < 0.05) {
+        // Cap maximum speed
+        const curSpeed = Math.hypot(ball.vx, ball.vy);
+        if (curSpeed > MAX_SPEED) {
+          ball.vx = (ball.vx / curSpeed) * MAX_SPEED;
+          ball.vy = (ball.vy / curSpeed) * MAX_SPEED;
+        }
+
+        // Clean stop threshold to prevent endless slow rolling
+        if (curSpeed < 0.08) {
           ball.vx = 0;
           ball.vy = 0;
         } else {
           anyMoving = true;
         }
 
+        // Cushion Bounces
         const minX = CUSHION + ball.radius;
         const maxX = TABLE_WIDTH - CUSHION - ball.radius;
         const minY = CUSHION + ball.radius;
@@ -502,35 +518,49 @@ function CueMasterApp() {
         });
       });
 
-      // 2. Ball-to-Ball Collisions
+      // 2. Mathematically Correct 2D Elastic Rigid-Body Collisions
       for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
           const b1 = balls[i];
           const b2 = balls[j];
           if (b1.isPotted || b2.isPotted) continue;
 
-          const dx = b2.x - b1.x;
+          const dx = b2.x - b1.x; // Vector pointing from b1 to b2
           const dy = b2.y - b1.y;
           const dist = Math.hypot(dx, dy);
+          const minDist = b1.radius + b2.radius;
 
-          if (dist < b1.radius + b2.radius && dist > 0) {
+          if (dist < minDist && dist > 0) {
             const nx = dx / dist;
             const ny = dy / dist;
 
-            const overlap = b1.radius + b2.radius - dist;
+            // Positional separation to prevent balls sticking/clumping
+            const overlap = minDist - dist;
             b1.x -= nx * overlap * 0.5;
             b1.y -= ny * overlap * 0.5;
             b2.x += nx * overlap * 0.5;
             b2.y += ny * overlap * 0.5;
 
-            const kx = b1.vx - b2.vx;
-            const ky = b1.vy - b2.vy;
-            const p = 2 * (nx * kx + ny * ky) / 2;
+            // Relative velocity along collision normal (b1 relative to b2)
+            const relVelNormal = (b1.vx - b2.vx) * nx + (b1.vy - b2.vy) * ny;
 
-            b1.vx -= p * nx * 0.92;
-            b1.vy -= p * ny * 0.92;
-            b2.vx += p * nx * 0.92;
-            b2.vy += p * ny * 0.92;
+            // ONLY apply impulse if balls are moving towards each other!
+            // (Prevents free energy creation, endless rolling, or direction inversion!)
+            if (relVelNormal > 0) {
+              const restitution = 0.94; // Elastic restitution of Aramith phenolic balls
+              const impulse = ((1 + restitution) * relVelNormal) / 2;
+
+              b1.vx -= impulse * nx;
+              b1.vy -= impulse * ny;
+              b2.vx += impulse * nx;
+              b2.vy += impulse * ny;
+
+              anyMoving = true;
+
+              if (soundEnabled && relVelNormal > 0.8) {
+                playBallClack(relVelNormal);
+              }
+            }
 
             // Track First Ball Hit by Cue Ball
             if (b1.type === 'cue' || b2.type === 'cue') {
@@ -541,26 +571,30 @@ function CueMasterApp() {
                 firstBallHitInShotRef.current = targetB;
               }
 
-              // Spin (Screw / Topspin / English)
-              if (spinY < -0.2) {
-                const screwForce = Math.abs(spinY) * 5.5;
-                cueB.vx += -nx * screwForce;
-                cueB.vy += -ny * screwForce;
-              } else if (spinY > 0.2) {
-                const followForce = spinY * 4.2;
-                cueB.vx += nx * followForce;
-                cueB.vy += ny * followForce;
-              }
-              if (Math.abs(spinX) > 0.2) {
-                cueB.vx += -ny * spinX * 3;
-                cueB.vy += nx * spinX * 3;
-              }
-            }
+              // Apply Spin Impulse ONCE per shot along aim angle axis
+              if (!spinAppliedInCurrentShotRef.current) {
+                spinAppliedInCurrentShotRef.current = true;
+                const cosAim = Math.cos(activeShotAimAngleRef.current);
+                const sinAim = Math.sin(activeShotAimAngleRef.current);
 
-            anyMoving = true;
-            const relSpeed = Math.hypot(kx, ky);
-            if (soundEnabled && relSpeed > 0.8) {
-              playBallClack(relSpeed);
+                if (spinY < -0.15) {
+                  // Backspin / Screw (اسكروه): Pulls cue ball BACKWARDS along aim line
+                  const screwMag = Math.abs(spinY) * 5.2;
+                  cueB.vx -= cosAim * screwMag;
+                  cueB.vy -= sinAim * screwMag;
+                } else if (spinY > 0.15) {
+                  // Topspin / Follow (توب سبن): Drives cue ball FORWARD along aim line
+                  const followMag = spinY * 4.0;
+                  cueB.vx += cosAim * followMag;
+                  cueB.vy += sinAim * followMag;
+                }
+                if (Math.abs(spinX) > 0.15) {
+                  // Side English: Deflects perpendicular to aim line
+                  const sideMag = spinX * 2.8;
+                  cueB.vx += -sinAim * sideMag;
+                  cueB.vy += cosAim * sideMag;
+                }
+              }
             }
           }
         }
@@ -574,6 +608,7 @@ function CueMasterApp() {
         const cueScratched = cueScratchedInShotRef.current;
         const firstHit = firstBallHitInShotRef.current;
         const activeShooter = turn;
+        const targetPocketForThisShot = activeShotCalledPocketRef.current; // The pocket called when shot was fired!
 
         pottedInCurrentShotRef.current = [];
         cueScratchedInShotRef.current = false;
@@ -600,7 +635,7 @@ function CueMasterApp() {
               return;
             }
 
-            if (calledPocketId !== null && black8Entry.pocketId !== calledPocketId) {
+            if (targetPocketForThisShot !== null && black8Entry.pocketId !== targetPocketForThisShot) {
               if (activeShooter === 'human') triggerGameOver('bot', '❌ خسرت المباراة! الكرة السوداء 8 سقطت في جيب غير الجيب المحدد.');
               else triggerGameOver('human', '🎉 مبروك الفوز! الخصم أسقط الكرة السوداء 8 في جيب غير الجيب المحدد.');
               return;
@@ -669,12 +704,12 @@ function CueMasterApp() {
             return;
           }
 
-          // CHECK CALL POCKET RULE: Potted in uncalled pocket returns to table!
+          // CHECK CALL POCKET RULE (Requirement 2 & 3: Evaluated against snapshot targetPocketForThisShot)
           const legallyCalledPots: Ball[] = [];
           const wrongPocketPots: Ball[] = [];
 
           pottedList.forEach(({ ball, pocketId }) => {
-            if (calledPocketId !== null && pocketId === calledPocketId) {
+            if (targetPocketForThisShot !== null && pocketId === targetPocketForThisShot) {
               legallyCalledPots.push(ball);
             } else {
               wrongPocketPots.push(ball);
@@ -714,7 +749,7 @@ function CueMasterApp() {
             }
           }
 
-          // Check if Shooter keeps their turn
+          // Check if Shooter keeps their turn! (Requirement 1: Finishing colors continues to 8-ball)
           const currentShooterGroup = activeShooter === 'human' ? humanGroup : botGroup;
           const pottedLegalBallInCalledPocket = legallyCalledPots.some(b => 
             currentShooterGroup === 'unassigned'
@@ -725,7 +760,24 @@ function CueMasterApp() {
           if (pottedLegalBallInCalledPocket) {
             if (activeShooter === 'human') setHumanScore(s => s + legallyCalledPots.length);
             else setBotScore(s => s + legallyCalledPots.length);
-            setTurnMessage('🔥 ضربة صحيحة في الجيب المحدد! دورك مستمر للضربة التالية!');
+
+            // CHECK: Did the shooter just finish their last ball?!
+            const remainingForShooter = ballsRef.current.filter(b => 
+              !b.isPotted && b.number !== 8 && (currentShooterGroup === 'solids' ? b.type === 'solid' : b.type === 'stripe')
+            );
+
+            if (remainingForShooter.length === 0 && currentShooterGroup !== 'unassigned') {
+              // Shooter cleared their entire group! Turn continues on the 8-Ball!
+              if (activeShooter === 'human') {
+                setTurn('human');
+                setTurnMessage('🏆 مبروك! أنهيت جميع كرات صنفك بنجاح! دورك مستمر الآن لإسقاط الكرة السوداء 8 في الجيب المحدد وإنهاء الجيم!');
+              } else {
+                setTurn('bot');
+                setTurnMessage('⚠️ الخصم أنهى جميع كراته ودوره مستمر على الكرة السوداء رقم 8!');
+              }
+            } else {
+              setTurnMessage('🔥 ضربة صحيحة في الجيب المحدد! دورك مستمر للضربة التالية!');
+            }
           } else {
             if (!isPractice) {
               setTurn(activeShooter === 'human' ? 'bot' : 'human');
@@ -906,7 +958,7 @@ function CueMasterApp() {
         ctx.fillText('🧤', ballInHandHoverPos.x, ballInHandHoverPos.y - 18);
       }
 
-      // 6. AIM LINE RAYCASTING & LEGAL TARGET VALIDATION (Red line if foul target!)
+      // 6. AIM LINE RAYCASTING & LEGAL TARGET VALIDATION
       const cueBall = balls[0];
       if ((turn === 'human' || isPractice) && !isShooting && !isBallInHand && cueBall && !cueBall.isPotted) {
         const cosA = Math.cos(aimAngle);
@@ -971,7 +1023,7 @@ function CueMasterApp() {
                 warningText = hitBall.number === 8 ? '⚠️ فاول: لا تلمس 8 الآن!' : '⚠️ فاول: صنف الخصم!';
               }
             } else {
-              // Final ball is 8
+              // Final ball is 8!
               if (hitBall.number !== 8) {
                 isAimedTargetLegal = false;
                 warningText = '⚠️ فاول: هدفك الكرة 8!';
@@ -983,7 +1035,6 @@ function CueMasterApp() {
         const endAimX = cueBall.x + cosA * closestHitDist;
         const endAimY = cueBall.y + sinA * closestHitDist;
 
-        // Line color: Red if illegal, white if legal
         ctx.strokeStyle = isAimedTargetLegal ? 'rgba(255, 255, 255, 0.75)' : 'rgba(239, 68, 68, 0.9)';
         ctx.setLineDash([5, 5]);
         ctx.lineWidth = 1.5;
@@ -1164,9 +1215,14 @@ function CueMasterApp() {
     const cueBall = ballsRef.current[0];
     if (!cueBall || cueBall.isPotted) return;
 
+    // Snapshot pocket & aim angle for this active shot
+    activeShotCalledPocketRef.current = calledPocketId;
+    activeShotAimAngleRef.current = aimAngle;
+    spinAppliedInCurrentShotRef.current = false;
+
     setIsShooting(true);
     if (soundEnabled) playCueStrike(power);
-    const speed = (power / 100) * 27;
+    const speed = (power / 100) * 26;
     cueBall.vx = Math.cos(aimAngle) * speed;
     cueBall.vy = Math.sin(aimAngle) * speed;
   };
@@ -1208,10 +1264,13 @@ function CueMasterApp() {
             }
           });
           setCalledPocketId(bestPocket.id);
+          activeShotCalledPocketRef.current = bestPocket.id;
 
           const variance = (Math.random() - 0.5) * 0.11;
           const targetAngle = Math.atan2(closest.y - cueBall.y, closest.x - cueBall.x) + variance;
           setAimAngle(targetAngle);
+          activeShotAimAngleRef.current = targetAngle;
+          spinAppliedInCurrentShotRef.current = false;
 
           setIsShooting(true);
           if (soundEnabled) playCueStrike(65);
@@ -1241,7 +1300,6 @@ function CueMasterApp() {
     setCurrentView('table');
   };
 
-  // Helper to get array of remaining balls for a group (1-7 or 9-15)
   const getGroupBalls = (group: 'solids' | 'stripes') => {
     const min = group === 'solids' ? 1 : 9;
     const max = group === 'solids' ? 7 : 15;
