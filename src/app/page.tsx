@@ -1708,15 +1708,13 @@ function CueMasterApp() {
               onMouseMove={handleCanvasMouseMove}
               onMouseDown={handleCanvasMouseDown}
               onMouseUp={handleCanvasMouseUp}
-              className={`w-full max-h-[68vh] object-contain rounded-2xl shadow-2xl border-4 ${
-                currentTable.id === "ice_frost"
-                  ? "border-cyan-500/50 shadow-cyan-500/20"
-                  : currentTable.id === "volcanic_lava"
-                  ? "border-rose-600/50 shadow-rose-600/20"
-                  : currentTable.id === "royal_purple"
-                  ? "border-amber-400/50 shadow-amber-400/20"
-                  : "border-amber-950/90 shadow-black"
-              } ${isBallInHand ? "cursor-grab" : isDraggingCueStick ? "cursor-grabbing" : "cursor-crosshair"}`}
+              style={{
+                borderColor: currentTable.cushionGlow,
+                boxShadow: `0 0 35px ${currentTable.cushionGlow}33, 0 10px 40px rgba(0,0,0,0.8)`
+              }}
+              className={`w-full max-h-[68vh] object-contain rounded-2xl border-4 ${
+                isBallInHand ? "cursor-grab" : isDraggingCueStick ? "cursor-grabbing" : "cursor-crosshair"
+              }`}
             />
           </div>
 

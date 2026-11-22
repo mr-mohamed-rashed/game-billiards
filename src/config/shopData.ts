@@ -24,15 +24,15 @@ export interface TableItem {
   id: string;
   nameAr: string;
   nameEn: string;
-  image?: string; // undefined for classic procedural table
+  image?: string;
   price: number;
   currency: 'coins' | 'gems';
   cushionGlow: string;
   feltColor: string;
-  friction: number; // base friction (e.g. 0.985)
-  bounceRestitution: number; // base bounce (e.g. 0.85)
+  friction: number;
+  bounceRestitution: number;
   descriptionAr: string;
-  ambientEffect: 'none' | 'frost' | 'royal' | 'magma';
+  ambientEffect: 'none' | 'forest' | 'frost' | 'cyber' | 'industrial' | 'royal' | 'lightning' | 'magma' | 'cosmic';
 }
 
 // 20 CUES FROM USER ASSETS
@@ -322,61 +322,141 @@ export const ALL_CUES: CueItem[] = [
   }
 ];
 
-// MODULAR POOL TABLES
+// THE 9 UNIQUE POOL TABLES
 export const ALL_TABLES: TableItem[] = [
+  // 1. Classic Championship (The Master Original)
   {
     id: 'classic',
-    nameAr: 'طاولة البطولة الخضراء الكلاسيكية',
-    nameEn: 'Classic Championship Green',
+    nameAr: 'طاولة البطولة الكلاسيكية (الأساسية)',
+    nameEn: 'Classic Championship Wood',
+    image: '/tables/table_classic_pro.jpg',
     price: 0,
     currency: 'coins',
     cushionGlow: '#22c55e',
     feltColor: '#15803d',
     friction: 0.985,
     bounceRestitution: 0.85,
-    descriptionAr: 'طاولة البطولة الدولية بقماش صوف ميرينو الأخضر الفاخر وإطار خشب الماهوجني المعتق.',
+    descriptionAr: 'طاولة خشب الماهوجني المعتق الكلاسيكية مع قماش صوف ميرينو الأخضر وزوايا النحاس المعتمدة دولياً.',
     ambientEffect: 'none'
   },
+  // 2. Enchanted Forest
+  {
+    id: 'enchanted_forest',
+    nameAr: 'طاولة الغابة المسحورة (Enchanted Forest)',
+    nameEn: 'Enchanted Druid Forest',
+    image: '/tables/table_enchanted_forest.jpg',
+    price: 20000,
+    currency: 'coins',
+    cushionGlow: '#4ade80',
+    feltColor: '#166534',
+    friction: 0.985,
+    bounceRestitution: 0.86,
+    descriptionAr: 'إطارات من أغصان الشجر الأزلية وأوراق خضراء حية تمنح الطاولة روح الطبيعة وسحر الغابات الخضراء.',
+    ambientEffect: 'forest'
+  },
+  // 3. Glacial Frost Ice
   {
     id: 'ice_frost',
-    nameAr: 'طاولة الصقيع الجليدي (Glacial Frost)',
+    nameAr: 'طاولة الصقيع والجليد المتجمد (Glacial Frost)',
     nameEn: 'Glacial Frost Ice Table',
     image: '/tables/table_ice_frost.jpg',
-    price: 25000,
+    price: 35000,
     currency: 'coins',
     cushionGlow: '#38bdf8',
     feltColor: '#0284c7',
-    friction: 0.988, // Slightly slicker, fast gliding on ice!
+    friction: 0.988, // Extra slick glide
     bounceRestitution: 0.88,
-    descriptionAr: 'منحوتة بالكامل من بلورات الجليد الشفاف مع حواف جليدية متجمدة وانزلاق سلس رائع.',
+    descriptionAr: 'منحوتة من صقيع القطب الشمالي مع بلورات ثلجية متجمدة وانزلاق فائق النعومة للكرات.',
     ambientEffect: 'frost'
   },
+  // 4. Future Cyber Tech
+  {
+    id: 'future_tech',
+    nameAr: 'طاولة التكنولوجيا المستقبلية (Cyber Tech)',
+    nameEn: 'Future Cyber Tech 2077',
+    image: '/tables/table_future_tech.jpg',
+    price: 50000,
+    currency: 'coins',
+    cushionGlow: '#06b6d4',
+    feltColor: '#0f172a',
+    friction: 0.986,
+    bounceRestitution: 0.88,
+    descriptionAr: 'هيكل معدني مستقبلي بدوائر إلكترونية متوهجة بإضاءات النيون السيان والبنفسجي الرقمية فائقة الحساب.',
+    ambientEffect: 'cyber'
+  },
+  // 5. Industrial Steampunk Steel
+  {
+    id: 'industrial_steel',
+    nameAr: 'طاولة الصلب الصناعي (Industrial Steel)',
+    nameEn: 'Industrial Steampunk Steel',
+    image: '/tables/table_industrial_steel.jpg',
+    price: 65000,
+    currency: 'coins',
+    cushionGlow: '#fb923c',
+    feltColor: '#334155',
+    friction: 0.984,
+    bounceRestitution: 0.87,
+    descriptionAr: 'صفائح صلب مقواة ومسامير برشام نحاسية مع تروس ستيمبانك وجيوب شبكية صناعية عتيدة.',
+    ambientEffect: 'industrial'
+  },
+  // 6. Royal Imperial Purple & Gold
   {
     id: 'royal_purple',
-    nameAr: 'طاولة الأرجوان والذهب الإمبراطوري',
-    nameEn: 'Royal Imperial Gold & Purple',
+    nameAr: 'طاولة الذهب الملكي والأرجوان (Royal Imperial)',
+    nameEn: 'Royal Imperial Purple & Gold',
     image: '/tables/table_royal_purple.jpg',
-    price: 45000,
+    price: 80000,
     currency: 'coins',
     cushionGlow: '#fbbf24',
     feltColor: '#581c87',
     friction: 0.985,
     bounceRestitution: 0.86,
-    descriptionAr: 'تصميم ملكي فاخر بإطارات عاجية مذهبة وزخارف أرستقراطية وقماش مخملي أرجواني فاخر.',
+    descriptionAr: 'إطارات عاجية مذهبة بنقوش أرستقراطية وقماش مخملي أرجواني فاخر تليق بأباطرة وملوك لعبة البلياردو.',
     ambientEffect: 'royal'
   },
+  // 7. Thunder & Lightning
+  {
+    id: 'lightning',
+    nameAr: 'طاولة البرق والرعد (Thunder & Lightning)',
+    nameEn: 'Thunderstorm Arcane Lightning',
+    image: '/tables/table_lightning.jpg',
+    price: 95000,
+    currency: 'coins',
+    cushionGlow: '#a855f7',
+    feltColor: '#1e1b4b',
+    friction: 0.986,
+    bounceRestitution: 0.89,
+    descriptionAr: 'صواعق كهربية زرقاء وبنفسجية مشحونة بطاقة الرعد تطلق شرارات ضوئية عند اصطدام الكرات.',
+    ambientEffect: 'lightning'
+  },
+  // 8. Volcanic Lava
   {
     id: 'volcanic_lava',
-    nameAr: 'طاولة حمم الجحيم البركانية (Inferno Magma)',
+    nameAr: 'طاولة الحمم البركانية (Inferno Magma)',
     nameEn: 'Inferno Volcanic Magma Table',
     image: '/tables/table_volcanic_lava.jpg',
-    price: 70000,
+    price: 110000,
     currency: 'coins',
     cushionGlow: '#ea580c',
     feltColor: '#991b1b',
     friction: 0.984,
-    bounceRestitution: 0.90, // Energetic lively bounce!
-    descriptionAr: 'حواف حجرية بركانية متشققة تفيض بحمم الصهارة النارية مع قماش أحمر قرمزي متوهج.',
+    bounceRestitution: 0.90, // Lively energetic cushion bounce
+    descriptionAr: 'حواف صخرية متصدعة تتدفق بحمم الصهارة المشتعلة مع ارتدادات حركية قوية لا ترحم.',
     ambientEffect: 'magma'
+  },
+  // 9. Cosmic Nebula
+  {
+    id: 'cosmic_nebula',
+    nameAr: 'طاولة السديم الكوني (Cosmic Nebula)',
+    nameEn: 'Cosmic Nebula & Galaxies',
+    image: '/tables/table_cosmic_nebula.jpg',
+    price: 130000,
+    currency: 'coins',
+    cushionGlow: '#60a5fa',
+    feltColor: '#030712',
+    friction: 0.987,
+    bounceRestitution: 0.89,
+    descriptionAr: 'مجرات حلزونية سابحة وثقوب سوداء تمتص الكرات في أرجاء الفضاء السحيق بإطار كروم ناصع.',
+    ambientEffect: 'cosmic'
   }
 ];
