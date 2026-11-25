@@ -24,6 +24,9 @@ interface Ball {
   type: "cue" | "solid" | "stripe" | "black" | "red" | "color";
   isPotted: boolean;
   value?: number;
+  px: number;
+  py: number;
+  pz: number;
 }
 
 interface Pocket {
@@ -378,6 +381,7 @@ function CueMasterApp() {
   const animFrameRef = useRef<number | null>(null);
   const tableImageCacheRef = useRef<Record<string, HTMLImageElement>>({});
 
+  const shotResolutionRef_timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Shot Resolution Tracking
   const firstBallHitInShotRef = useRef<Ball | null>(null);
   const pottedInCurrentShotRef = useRef<{ ball: Ball; pocketId: number }[]>([]);
@@ -578,6 +582,9 @@ function CueMasterApp() {
       number: 0,
       type: "cue",
       isPotted: false,
+      px: 0.25,
+      py: -0.2,
+      pz: 0.947,
     });
 
     if (currentMode === "8-ball") {
@@ -593,6 +600,9 @@ function CueMasterApp() {
         for (let c = 0; c <= r; c++) {
           const ballNum = RACK_NUMBERS[ballIdx++];
           const cfg = BALL_CONFIG_MAP[ballNum];
+          const tiltX = Math.sin(ballNum * 1.3) * 0.25;
+          const tiltY = Math.cos(ballNum * 0.9) * 0.25;
+          const tiltZ = Math.sqrt(Math.max(0.1, 1 - tiltX * tiltX - tiltY * tiltY));
           balls.push({
             id: ballNum,
             x: rowX,
@@ -604,6 +614,9 @@ function CueMasterApp() {
             number: ballNum,
             type: cfg.type,
             isPotted: false,
+            px: tiltX,
+            py: tiltY,
+            pz: tiltZ,
           });
         }
       }
@@ -630,6 +643,9 @@ function CueMasterApp() {
             type: "red",
             value: 1,
             isPotted: false,
+            px: 0,
+            py: 0,
+            pz: 1,
           });
         }
       }
@@ -655,6 +671,9 @@ function CueMasterApp() {
           type: "color",
           value: c.val,
           isPotted: false,
+          px: 0,
+          py: 0,
+          pz: 1,
         });
       });
     }
@@ -827,8 +846,19 @@ function CueMasterApp() {
       glossCanvasRef.current = gc;
     }
 
-    const SUB_STEPS = 8;
-    const MAX_SPEED = 28;
+    const SUB_STEPS = 10;
+    const MAX_SPEED = 42;
+
+    const clearCinematicCam = () => {
+      if (shotResolutionRef_timer.current) {
+        clearTimeout(shotResolutionRef_timer.current);
+        shotResolutionRef_timer.current = null;
+      }
+      if (cinematicCamRef.current) {
+        cinematicCamRef.current = null;
+        setCinematicCam(null);
+      }
+    };
 
     const updatePhysics = () => {
       const balls = ballsRef.current;
@@ -843,7 +873,7 @@ function CueMasterApp() {
 
       const cueActive = ALL_CUES.find((c) => c.id === selectedCueRef.current) || ALL_CUES[0];
       const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
-      const timeScale = cinematicCamRef.current ? 0.35 : 1.0;
+      const timeScale = cinematicCamRef.current ? 0.58 : 1.0;
       const stepFriction = Math.pow(subFriction, timeScale);
       const invSub = timeScale / SUB_STEPS;
 
@@ -861,7 +891,7 @@ function CueMasterApp() {
           ball.vy *= stepFriction;
 
           const speed = Math.hypot(ball.vx, ball.vy);
-          if (speed > 0.08) anyMoving = true;
+          if (speed > 0.15) anyMoving = true;
 
           // High-Elasticity Rubber Cushion Rails
           if (ball.y < 64 && ((ball.x > 94 && ball.x < 422) || (ball.x > 478 && ball.x < 806))) {
@@ -893,7 +923,7 @@ function CueMasterApp() {
             const dist = Math.hypot(dx, dy);
 
             if (dist < 30 && dist > 0.5) {
-              const pull = 0.45 * (1 - dist / 30) * timeScale;
+              const pull = 0.48 * (1 - dist / 30) * timeScale;
               ball.vx += (dx / dist) * pull;
               ball.vy += (dy / dist) * pull;
             }
@@ -901,8 +931,9 @@ function CueMasterApp() {
             const isCalledTargetPocket = activeShotCalledPocketRef.current !== null && p.id === activeShotCalledPocketRef.current;
             if (
               !cinematicTriggeredThisShotRef.current &&
-              dist < 38 &&
+              dist < 36 &&
               dist > 14 &&
+              speed > 1.8 &&
               (isCalledTargetPocket || ball.number === 8) &&
               ball.type !== "cue"
             ) {
@@ -918,6 +949,12 @@ function CueMasterApp() {
                 cinematicCamRef.current = camData;
                 setCinematicCam(camData);
                 if (sfxEnabled) playCinematicWhoosh();
+                if (shotResolutionRef_timer.current) clearTimeout(shotResolutionRef_timer.current);
+                shotResolutionRef_timer.current = setTimeout(() => {
+                  cinematicCamRef.current = null;
+                  setCinematicCam(null);
+                  shotResolutionRef_timer.current = null;
+                }, 520);
               }
             }
 
@@ -931,6 +968,14 @@ function CueMasterApp() {
                 cueScratchedInShotRef.current = true;
               } else {
                 pottedInCurrentShotRef.current.push({ ball, pocketId: p.id });
+              }
+              if (cinematicCamRef.current) {
+                if (shotResolutionRef_timer.current) clearTimeout(shotResolutionRef_timer.current);
+                shotResolutionRef_timer.current = setTimeout(() => {
+                  cinematicCamRef.current = null;
+                  setCinematicCam(null);
+                  shotResolutionRef_timer.current = null;
+                }, 180);
               }
               break;
             }
@@ -1024,16 +1069,16 @@ function CueMasterApp() {
                   const curSpinY = spinYRef.current;
 
                   if (curSpinY < -0.15) {
-                    const screwMag = Math.abs(curSpinY) * 4.8 * cueSpinBonus;
+                    const screwMag = Math.abs(curSpinY) * 5.6 * cueSpinBonus;
                     cueB.vx -= cosAim * screwMag;
                     cueB.vy -= sinAim * screwMag;
                   } else if (curSpinY > 0.15) {
-                    const followMag = curSpinY * 3.6 * cueSpinBonus;
+                    const followMag = curSpinY * 4.4 * cueSpinBonus;
                     cueB.vx += cosAim * followMag;
                     cueB.vy += sinAim * followMag;
                   }
                   if (Math.abs(curSpinX) > 0.15) {
-                    const sideMag = curSpinX * 2.2 * cueSpinBonus;
+                    const sideMag = curSpinX * 2.6 * cueSpinBonus;
                     cueB.vx += -sinAim * sideMag;
                     cueB.vy += cosAim * sideMag;
                   }
@@ -1044,20 +1089,44 @@ function CueMasterApp() {
         }
       }
 
-      // Clean Stop Threshold & Speed Clamping
+      // Update 3D Sphere Rolling Rotation & Clean Stop Threshold
       for (let i = 0; i < ballCount; i++) {
         const ball = balls[i];
         if (ball.isPotted) continue;
-        const curSpeed = Math.hypot(ball.vx, ball.vy);
+        let curSpeed = Math.hypot(ball.vx, ball.vy);
         if (curSpeed > MAX_SPEED) {
           ball.vx = (ball.vx / curSpeed) * MAX_SPEED;
           ball.vy = (ball.vy / curSpeed) * MAX_SPEED;
+          curSpeed = MAX_SPEED;
         }
-        if (curSpeed < 0.08) {
+        // Natural felt low-speed settle so creeping balls stop crisply instead of lingering
+        if (curSpeed > 0.15 && curSpeed < 0.85) {
+          ball.vx *= 0.93;
+          ball.vy *= 0.93;
+          curSpeed = Math.hypot(ball.vx, ball.vy);
+        }
+        if (curSpeed <= 0.15) {
           ball.vx = 0;
           ball.vy = 0;
         } else {
           anyMoving = true;
+          // Rotate 3D sphere pole (px, py, pz) smoothly along velocity vector
+          const moveDist = curSpeed * timeScale;
+          const theta = moveDist / ball.radius;
+          const ax = -ball.vy / curSpeed;
+          const ay = ball.vx / curSpeed;
+          const cosT = Math.cos(theta);
+          const sinT = Math.sin(theta);
+          const oneMinusCos = 1 - cosT;
+          const dot = ax * ball.px + ay * ball.py;
+
+          const npx = ball.px * cosT + (ay * ball.pz) * sinT + ax * dot * oneMinusCos;
+          const npy = ball.py * cosT + (-ax * ball.pz) * sinT + ay * dot * oneMinusCos;
+          const npz = ball.pz * cosT + (ax * ball.py - ay * ball.px) * sinT;
+          const norm = Math.hypot(npx, npy, npz) || 1;
+          ball.px = npx / norm;
+          ball.py = npy / norm;
+          ball.pz = npz / norm;
         }
       }
 
@@ -1071,14 +1140,7 @@ function CueMasterApp() {
         if (powerHandleRef.current) powerHandleRef.current.style.top = "calc(0% - 10px)";
         if (powerTextRef.current) powerTextRef.current.textContent = "0%";
 
-        if (cinematicCamRef.current) {
-          setTimeout(() => {
-            cinematicCamRef.current = null;
-            setCinematicCam(null);
-          }, 1100);
-        } else {
-          setCinematicCam(null);
-        }
+        clearCinematicCam();
 
         const pottedList = pottedInCurrentShotRef.current;
         const cueScratched = cueScratchedInShotRef.current;
@@ -1176,7 +1238,7 @@ function CueMasterApp() {
                     cb.vy = 0;
                     cb.isPotted = false;
                   }
-                }, 1000);
+                }, 400);
               }
             } else {
               isBallInHandRef.current = true;
@@ -1235,7 +1297,7 @@ function CueMasterApp() {
                 });
                 setTurnMessage(`🎱 صنفك المعتمد: [${isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)"}]!`);
               }
-              setTimeout(() => setGroupAnnouncement(null), 1200);
+              setTimeout(() => setGroupAnnouncement(null), 1000);
             }
           }
 
@@ -1380,7 +1442,7 @@ function CueMasterApp() {
         }
       }
 
-      // 3. Balls Rendering (Lightweight: cached offscreen gloss overlay, no per-frame gradients)
+      // 3. Balls Rendering (Realistic 3D sphere roll + cached offscreen gloss overlay)
       const balls = ballsRef.current;
       const glossCanvas = glossCanvasRef.current;
       const curSpinX = spinXRef.current;
@@ -1389,51 +1451,96 @@ function CueMasterApp() {
       for (let i = 0; i < balls.length; i++) {
         const ball = balls[i];
         if (ball.isPotted) continue;
+        const r = ball.radius;
 
+        // Soft table shadow
         ctx.fillStyle = "rgba(0,0,0,0.42)";
         ctx.beginPath();
-        ctx.arc(ball.x + 2, ball.y + 3, ball.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = ball.color;
-        ctx.beginPath();
-        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.arc(ball.x + 2, ball.y + 3, r, 0, Math.PI * 2);
         ctx.fill();
 
         if (ball.type === "stripe") {
-          ctx.fillStyle = "#ffffff";
+          // Striped ball: white sphere + clipped rolling colored equatorial band
+          ctx.fillStyle = "#f8fafc";
           ctx.beginPath();
-          ctx.arc(ball.x, ball.y, ball.radius - 3, 0, Math.PI * 2);
+          ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
           ctx.fill();
 
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
+          ctx.clip();
+
+          const bandAng = Math.atan2(ball.py, ball.px);
+          const shift = Math.hypot(ball.px, ball.py) * r * 0.55;
+          ctx.translate(ball.x + ball.px * r * 0.55, ball.y + ball.py * r * 0.55);
+          ctx.rotate(bandAng);
+          ctx.fillStyle = ball.color;
+          ctx.fillRect(-r * 1.35, -r * 0.58 - shift * 0.05, r * 2.7, r * 1.16);
+          ctx.restore();
+        } else {
+          // Solid / Black / Cue / Snooker base sphere
           ctx.fillStyle = ball.color;
           ctx.beginPath();
-          ctx.ellipse(ball.x, ball.y, ball.radius - 3, (ball.radius - 3) * 0.45, 0, 0, Math.PI * 2);
+          ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
           ctx.fill();
         }
 
+        // Rolling 3D Number Disc & Number (foreshortened smoothly over the sphere)
         if (ball.type === "solid" || ball.type === "stripe" || ball.type === "black") {
-          ctx.fillStyle = "#ffffff";
-          ctx.beginPath();
-          ctx.arc(ball.x, ball.y, ball.radius * 0.42, 0, Math.PI * 2);
-          ctx.fill();
+          if (ball.pz > 0.06) {
+            const spotX = ball.x + ball.px * r * 0.72;
+            const spotY = ball.y + ball.py * r * 0.72;
+            const spotAng = Math.atan2(ball.py, ball.px);
+            const scaleZ = Math.max(0.18, ball.pz);
+            const discR = r * 0.43;
 
-          ctx.fillStyle = "#0f172a";
-          ctx.font = `bold ${ball.number >= 10 ? "8px" : "9px"} sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(ball.number.toString(), ball.x, ball.y);
+            ctx.save();
+            ctx.translate(spotX, spotY);
+            ctx.rotate(spotAng);
+            ctx.scale(scaleZ, 1);
+            ctx.rotate(-spotAng);
+
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(0, 0, discR, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (ball.pz > 0.25) {
+              ctx.fillStyle = "#0f172a";
+              ctx.font = `bold ${ball.number >= 10 ? "8px" : "9px"} sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText(ball.number.toString(), 0, 0.5);
+            }
+            ctx.restore();
+          }
         }
 
-        if (ball.type === "cue" && (Math.abs(curSpinX) > 0.05 || Math.abs(curSpinY) > 0.05)) {
-          ctx.fillStyle = "#ef4444";
-          ctx.beginPath();
-          ctx.arc(ball.x + curSpinX * 7, ball.y + curSpinY * 7, 2.5, 0, Math.PI * 2);
-          ctx.fill();
+        // Cue Ball: Rolling Pro-Cup reference dots + English aim indicator
+        if (ball.type === "cue") {
+          if (ball.pz > 0.1) {
+            ctx.fillStyle = "rgba(220, 38, 38, 0.48)";
+            ctx.beginPath();
+            ctx.arc(ball.x + ball.px * r * 0.72, ball.y + ball.py * r * 0.72, 2.0 * Math.max(0.4, ball.pz), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          if (-ball.pz > 0.1) {
+            ctx.fillStyle = "rgba(30, 41, 59, 0.35)";
+            ctx.beginPath();
+            ctx.arc(ball.x - ball.px * r * 0.72, ball.y - ball.py * r * 0.72, 2.0 * Math.max(0.4, -ball.pz), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          if (!isShootingRef.current && (Math.abs(curSpinX) > 0.05 || Math.abs(curSpinY) > 0.05)) {
+            ctx.fillStyle = "#ef4444";
+            ctx.beginPath();
+            ctx.arc(ball.x + curSpinX * 7, ball.y + curSpinY * 7, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
 
         if (glossCanvas) {
-          ctx.drawImage(glossCanvas, ball.x - ball.radius - 1, ball.y - ball.radius - 1);
+          ctx.drawImage(glossCanvas, ball.x - r - 1, ball.y - r - 1);
         }
       }
 
@@ -1577,19 +1684,24 @@ function CueMasterApp() {
           }
         }
 
-        // 6. Cue Stick with Dynamic Pull-Back (lightweight shadow without GPU shadowBlur)
+        // 6. Cue Stick with Dynamic Pull-Back (Transparent PNG sprite, sleek drop shadow)
         const cueOffset = BALL_RADIUS + 8 + (powerRef.current / 100) * 85;
         const cueDrawLength = 360;
-        const cueDrawThickness = 18;
+        const cueDrawThickness = activeCueObj.category === "legendary" ? 21 : 13;
         const cueImg = activeCueObj.image ? cueImageCacheRef.current[activeCueObj.id] : null;
 
         ctx.save();
         ctx.translate(cueBall.x, cueBall.y);
         ctx.rotate(curAimAngle);
 
-        // Lightweight offset drop shadow
-        ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.fillRect(-cueOffset - cueDrawLength + 3, 3, cueDrawLength, 6);
+        // Subtle tapered drop shadow underneath cue shaft
+        ctx.strokeStyle = "rgba(0,0,0,0.32)";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-cueOffset - 4, 4);
+        ctx.lineTo(-cueOffset - cueDrawLength + 6, 6);
+        ctx.stroke();
 
         if (cueImg && cueImg.complete && cueImg.naturalWidth > 0) {
           ctx.drawImage(
@@ -1621,14 +1733,6 @@ function CueMasterApp() {
           ctx.fillRect(-cueOffset + 4, -3, 2, 6);
         }
 
-        if (activeCueObj.category === "legendary") {
-          ctx.strokeStyle = activeCueObj.glowColor;
-          ctx.lineWidth = 1.5;
-          ctx.globalAlpha = 0.55;
-          ctx.strokeRect(-cueOffset - cueDrawLength, -cueDrawThickness / 2, cueDrawLength, cueDrawThickness);
-          ctx.globalAlpha = 1.0;
-        }
-
         ctx.restore();
       }
 
@@ -1639,6 +1743,7 @@ function CueMasterApp() {
     animFrameRef.current = requestAnimationFrame(render);
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      clearCinematicCam();
     };
   }, [currentView]);
 
@@ -1896,8 +2001,8 @@ function CueMasterApp() {
     if (soundEnabledRef.current) playCueStrike(shotPower);
 
     const curCue = ALL_CUES.find((c) => c.id === selectedCueRef.current) || ALL_CUES[0];
-    const forceBonus = 0.85 + (curCue.stats.force / 10) * 0.35;
-    const speed = (shotPower / 100) * 24 * forceBonus;
+    const forceBonus = 0.92 + (curCue.stats.force / 10) * 0.35;
+    const speed = (shotPower / 100) * 36 * forceBonus;
     cueBall.vx = Math.cos(aimAngleRef.current) * speed;
     cueBall.vy = Math.sin(aimAngleRef.current) * speed;
   };
@@ -1951,12 +2056,12 @@ function CueMasterApp() {
 
           isShootingRef.current = true;
           setIsShooting(true);
-          if (soundEnabledRef.current) playCueStrike(65);
-          const botSpeed = 15 + Math.random() * 8;
+          if (soundEnabledRef.current) playCueStrike(75);
+          const botSpeed = 21 + Math.random() * 10;
           cueBall.vx = Math.cos(targetAngle) * botSpeed;
           cueBall.vy = Math.sin(targetAngle) * botSpeed;
         }
-      }, 1400);
+      }, 500);
 
       return () => clearTimeout(botTimer);
     }
@@ -2594,30 +2699,27 @@ function CueMasterApp() {
               {/* Cinematic Letterbox Overlays */}
               {cinematicCam && (
                 <>
-                  <div dir="rtl" className="absolute top-0 left-0 right-0 z-30 h-8 bg-black/90 border-b border-amber-500/40 flex items-center justify-between px-4 pointer-events-none">
-                    <span className="text-[10px] font-black text-red-500">🔴 REC | لقطة سينمائية</span>
+                  <div dir="rtl" className="absolute top-0 left-0 right-0 z-30 h-7 bg-black/85 border-b border-amber-500/40 flex items-center justify-between px-4 pointer-events-none">
+                    <span className="text-[10px] font-black text-red-500">🔴 لقطة قريبة</span>
                     <span className="text-[10px] font-black text-amber-300">🎬 POCKET CAM</span>
-                    <span className="text-[10px] font-bold text-slate-300">جيب: {cinematicCam.pocket.name}</span>
+                    <span className="text-[10px] font-bold text-slate-300">{cinematicCam.pocket.name}</span>
                   </div>
-                  <div dir="rtl" className="absolute bottom-0 left-0 right-0 z-30 h-8 bg-black/90 border-t border-amber-500/40 flex items-center justify-between px-4 pointer-events-none">
-                    <span className="text-[10px] font-black text-emerald-400">🎯 SLOW MOTION 0.35x</span>
+                  <div dir="rtl" className="absolute bottom-0 left-0 right-0 z-30 h-7 bg-black/85 border-t border-amber-500/40 flex items-center justify-between px-4 pointer-events-none">
+                    <span className="text-[10px] font-black text-emerald-400">🎯 SLOW MOTION</span>
                     <span className="text-[10px] font-mono text-amber-400 font-extrabold">
-                      {cinematicCam.ballNum === 8 ? "🏆 الكرة 8 الحاسمة!" : `كرة (${cinematicCam.ballNum})`}
+                      {cinematicCam.ballNum === 8 ? "🏆 الكرة 8!" : `كرة (${cinematicCam.ballNum})`}
                     </span>
                   </div>
                 </>
               )}
 
               <div
-                className="flex items-center justify-center transition-transform duration-700 ease-out"
+                className="flex items-center justify-center transition-transform duration-300 ease-out will-change-transform"
                 style={{
-                  perspective: "900px",
                   transformOrigin: cinematicCam
                     ? `${(cinematicCam.pocket.x / TABLE_WIDTH) * 100}% ${(cinematicCam.pocket.y / TABLE_HEIGHT) * 100}%`
                     : "50% 50%",
-                  transform: cinematicCam
-                    ? `scale(2.15) rotateX(${cinematicCam.pocket.y < TABLE_HEIGHT / 2 ? "-40deg" : "40deg"})`
-                    : "scale(1) rotateX(0deg)",
+                  transform: cinematicCam ? "scale(1.28)" : "scale(1)",
                 }}
               >
                 <canvas
