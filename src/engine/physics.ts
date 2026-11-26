@@ -20,6 +20,62 @@ export function clampBallInHandPos(x: number, y: number): { x: number; y: number
   };
 }
 
+function makeBallAxes(seed: number) {
+  // Deterministic initial 3D orientation (number pole p + orthogonal stripe pole s)
+  const px = Math.sin(seed * 1.37) * 0.28;
+  const py = Math.cos(seed * 0.91) * 0.28;
+  const pz = Math.sqrt(Math.max(0.1, 1 - px * px - py * py));
+
+  // Build vector orthogonal to p
+  const rx = Math.cos(seed * 2.13);
+  const ry = Math.sin(seed * 2.13);
+  const rz = 0;
+  const dot = rx * px + ry * py + rz * pz;
+  let sx = rx - dot * px;
+  let sy = ry - dot * py;
+  let sz = rz - dot * pz;
+  const sn = Math.hypot(sx, sy, sz) || 1;
+  sx /= sn;
+  sy /= sn;
+  sz /= sn;
+  return { px, py, pz, sx, sy, sz };
+}
+
+export function findFreeCueBallPos(balls: Ball[]): { x: number; y: number } {
+  const headX = 82 + (823 - 82) * 0.25;
+  const centerY = 221.5;
+  const minGap = BALL_RADIUS * 2.25;
+
+  const isFree = (cx: number, cy: number) =>
+    !balls.some((b, idx) => idx > 0 && !b.isPotted && Math.hypot(b.x - cx, b.y - cy) < minGap);
+
+  if (isFree(headX, centerY)) return { x: headX, y: centerY };
+
+  for (let ring = 1; ring <= 14; ring++) {
+    const rad = ring * 20;
+    const steps = 8 + ring * 2;
+    for (let k = 0; k < steps; k++) {
+      const ang = (k / steps) * Math.PI * 2;
+      const cand = clampBallInHandPos(headX + Math.cos(ang) * rad, centerY + Math.sin(ang) * rad);
+      if (isFree(cand.x, cand.y)) return cand;
+    }
+  }
+  return { x: headX, y: centerY };
+}
+
+export function placeCueBallSafely(balls: Ball[]): { x: number; y: number } {
+  const pos = findFreeCueBallPos(balls);
+  const cb = balls[0];
+  if (cb) {
+    cb.x = pos.x;
+    cb.y = pos.y;
+    cb.vx = 0;
+    cb.vy = 0;
+    cb.isPotted = false;
+  }
+  return pos;
+}
+
 export function initBallsRack(mode: GameMode): Ball[] {
   const balls: Ball[] = [];
   const tableLeft = 82;
@@ -37,9 +93,12 @@ export function initBallsRack(mode: GameMode): Ball[] {
     number: 0,
     type: "cue",
     isPotted: false,
-    px: 0.25,
-    py: -0.2,
-    pz: 0.947,
+    px: 0,
+    py: 0,
+    pz: 1,
+    sx: 1,
+    sy: 0,
+    sz: 0,
   });
 
   if (mode === "8-ball") {
@@ -55,9 +114,7 @@ export function initBallsRack(mode: GameMode): Ball[] {
       for (let c = 0; c <= r; c++) {
         const ballNum = RACK_NUMBERS[ballIdx++];
         const cfg = BALL_CONFIG_MAP[ballNum];
-        const tiltX = Math.sin(ballNum * 1.3) * 0.25;
-        const tiltY = Math.cos(ballNum * 0.9) * 0.25;
-        const tiltZ = Math.sqrt(Math.max(0.1, 1 - tiltX * tiltX - tiltY * tiltY));
+        const axes = makeBallAxes(ballNum);
         balls.push({
           id: ballNum,
           x: rowX,
@@ -69,9 +126,7 @@ export function initBallsRack(mode: GameMode): Ball[] {
           number: ballNum,
           type: cfg.type,
           isPotted: false,
-          px: tiltX,
-          py: tiltY,
-          pz: tiltZ,
+          ...axes,
         });
       }
     }
@@ -85,6 +140,7 @@ export function initBallsRack(mode: GameMode): Ball[] {
       const rowX = apexX + r * rowSpacing;
       const startY = centerY - (r * spacing) / 2;
       for (let c = 0; c <= r; c++) {
+        const axes = makeBallAxes(sId);
         balls.push({
           id: sId++,
           x: rowX,
@@ -97,9 +153,7 @@ export function initBallsRack(mode: GameMode): Ball[] {
           type: "red",
           value: 1,
           isPotted: false,
-          px: 0,
-          py: 0,
-          pz: 1,
+          ...axes,
         });
       }
     }
@@ -113,6 +167,7 @@ export function initBallsRack(mode: GameMode): Ball[] {
       { color: "#09090b", val: 7, x: tableRight - 55, y: centerY },
     ];
     colors.forEach((c) => {
+      const axes = makeBallAxes(c.val);
       balls.push({
         id: sId++,
         x: c.x,
@@ -125,9 +180,7 @@ export function initBallsRack(mode: GameMode): Ball[] {
         type: "color",
         value: c.val,
         isPotted: false,
-        px: 0,
-        py: 0,
-        pz: 1,
+        ...axes,
       });
     });
   }
@@ -440,22 +493,36 @@ export function stepPhysics({
       ball.vy = 0;
     } else {
       anyMoving = true;
-      const moveDist = curSpeed * effectiveScale;
-      const theta = moveDist / ball.radius;
+      // Smooth anti-strobing 3D sphere roll rotation for both pole (p) and stripe axis (s)
+      const theta = Math.min(0.42 * dtNorm, (curSpeed * effectiveScale) / (ball.radius * 1.45));
       const ax = -ball.vy / curSpeed;
       const ay = ball.vx / curSpeed;
       const cosT = Math.cos(theta);
       const sinT = Math.sin(theta);
       const oneMinusCos = 1 - cosT;
-      const dot = ax * ball.px + ay * ball.py;
 
-      const npx = ball.px * cosT + ay * ball.pz * sinT + ax * dot * oneMinusCos;
-      const npy = ball.py * cosT - ax * ball.pz * sinT + ay * dot * oneMinusCos;
+      const dotP = ax * ball.px + ay * ball.py;
+      const npx = ball.px * cosT + ay * ball.pz * sinT + ax * dotP * oneMinusCos;
+      const npy = ball.py * cosT - ax * ball.pz * sinT + ay * dotP * oneMinusCos;
       const npz = ball.pz * cosT + (ax * ball.py - ay * ball.px) * sinT;
-      const norm = Math.hypot(npx, npy, npz) || 1;
-      ball.px = npx / norm;
-      ball.py = npy / norm;
-      ball.pz = npz / norm;
+      const normP = Math.hypot(npx, npy, npz) || 1;
+      ball.px = npx / normP;
+      ball.py = npy / normP;
+      ball.pz = npz / normP;
+
+      const dotS = ax * ball.sx + ay * ball.sy;
+      let nsx = ball.sx * cosT + ay * ball.sz * sinT + ax * dotS * oneMinusCos;
+      let nsy = ball.sy * cosT - ax * ball.sz * sinT + ay * dotS * oneMinusCos;
+      let nsz = ball.sz * cosT + (ax * ball.sy - ay * ball.sx) * sinT;
+      // Re-orthogonalize s against p so float drift never accumulates
+      const ps = nsx * ball.px + nsy * ball.py + nsz * ball.pz;
+      nsx -= ps * ball.px;
+      nsy -= ps * ball.py;
+      nsz -= ps * ball.pz;
+      const normS = Math.hypot(nsx, nsy, nsz) || 1;
+      ball.sx = nsx / normS;
+      ball.sy = nsy / normS;
+      ball.sz = nsz / normS;
     }
   }
 

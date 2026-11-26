@@ -14,9 +14,14 @@ export interface Ball {
   type: "cue" | "solid" | "stripe" | "black" | "red" | "color";
   isPotted: boolean;
   value?: number;
+  // Number pole unit vector
   px: number;
   py: number;
   pz: number;
+  // Orthogonal stripe / polar-cap unit vector (s · p = 0)
+  sx: number;
+  sy: number;
+  sz: number;
 }
 
 export interface Pocket {

@@ -220,7 +220,78 @@ export function renderTableScene({
     ctx.setLineDash([]);
   }
 
-  // 3. Balls Rendering (Realistic 3D Sphere Roll + Cached Offscreen Gloss Overlay)
+  // 3. Balls Rendering (Seamless 3D Sphere Roll + Dual-Pole Numbers + 6-Dot Cue Ball)
+  const drawBallNumberPole = (
+    ball: Ball,
+    dirX: number,
+    dirY: number,
+    dirZ: number
+  ) => {
+    if (dirZ <= 0.1) return;
+    const r = ball.radius;
+    const spotX = ball.x + dirX * r * 0.86;
+    const spotY = ball.y + dirY * r * 0.86;
+    const spotAng = Math.hypot(dirX, dirY) > 0.001 ? Math.atan2(dirY, dirX) : 0;
+    const scaleZ = Math.max(0.16, dirZ);
+    const discR = r * 0.43;
+
+    ctx.save();
+    ctx.translate(spotX, spotY);
+    ctx.rotate(spotAng);
+    ctx.scale(scaleZ, 1);
+    ctx.rotate(-spotAng);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(0, 0, discR, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (dirZ > 0.24) {
+      ctx.fillStyle = "#0f172a";
+      ctx.font = `bold ${ball.number >= 10 ? "8px" : "9px"} sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(ball.number.toString(), 0, 0.5);
+    }
+    ctx.restore();
+  };
+
+  const drawPolarCap = (
+    ball: Ball,
+    cx: number,
+    cy: number,
+    cz: number
+  ) => {
+    if (cz <= -0.52) return;
+    const r = ball.radius;
+    const xyHyp = Math.hypot(cx, cy);
+    const ang = xyHyp > 0.001 ? Math.atan2(cy, cx) : 0;
+    const xOff = 0.56 * r * xyHyp;
+    const ry = 0.83 * r;
+    const rx = Math.max(0.5, 0.83 * r * Math.abs(cz));
+
+    ctx.save();
+    ctx.translate(ball.x, ball.y);
+    ctx.rotate(ang);
+    ctx.fillStyle = "#f8fafc";
+    ctx.beginPath();
+    if (cz >= 0.45) {
+      ctx.ellipse(xOff, 0, rx, ry, 0, 0, Math.PI * 2);
+    } else if (cz >= 0) {
+      ctx.ellipse(xOff, 0, rx, ry, 0, Math.PI / 2, -Math.PI / 2, false);
+      ctx.lineTo(r * 1.15, -r * 1.15);
+      ctx.lineTo(r * 1.15, r * 1.15);
+      ctx.closePath();
+    } else {
+      ctx.ellipse(xOff, 0, rx, ry, 0, Math.PI / 2, -Math.PI / 2, true);
+      ctx.lineTo(r * 1.15, -r * 1.15);
+      ctx.lineTo(r * 1.15, r * 1.15);
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.restore();
+  };
+
   for (let i = 0; i < balls.length; i++) {
     const ball = balls[i];
     if (ball.isPotted) continue;
@@ -231,84 +302,59 @@ export function renderTableScene({
     ctx.arc(ball.x + 2, ball.y + 3, r, 0, Math.PI * 2);
     ctx.fill();
 
-    if (ball.type === "stripe") {
-      ctx.fillStyle = "#f8fafc";
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
-      ctx.fill();
+    // Base sphere color
+    ctx.fillStyle = ball.color;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
+    ctx.fill();
 
+    if (ball.type === "stripe") {
       ctx.save();
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
       ctx.clip();
-
-      const bandAng = Math.atan2(ball.py, ball.px);
-      ctx.translate(ball.x + ball.px * r * 0.55, ball.y + ball.py * r * 0.55);
-      ctx.rotate(bandAng);
-      ctx.fillStyle = ball.color;
-      ctx.fillRect(-r * 1.35, -r * 0.58, r * 2.7, r * 1.16);
+      drawPolarCap(ball, ball.sx, ball.sy, ball.sz);
+      drawPolarCap(ball, -ball.sx, -ball.sy, -ball.sz);
       ctx.restore();
-    } else {
-      ctx.fillStyle = ball.color;
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
-      ctx.fill();
     }
 
     if (ball.type === "solid" || ball.type === "stripe" || ball.type === "black") {
-      if (ball.pz > 0.06) {
-        const spotX = ball.x + ball.px * r * 0.72;
-        const spotY = ball.y + ball.py * r * 0.72;
-        const spotAng = Math.atan2(ball.py, ball.px);
-        const scaleZ = Math.max(0.18, ball.pz);
-        const discR = r * 0.43;
-
-        ctx.save();
-        ctx.translate(spotX, spotY);
-        ctx.rotate(spotAng);
-        ctx.scale(scaleZ, 1);
-        ctx.rotate(-spotAng);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.arc(0, 0, discR, 0, Math.PI * 2);
-        ctx.fill();
-
-        if (ball.pz > 0.25) {
-          ctx.fillStyle = "#0f172a";
-          ctx.font = `bold ${ball.number >= 10 ? "8px" : "9px"} sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(ball.number.toString(), 0, 0.5);
-        }
-        ctx.restore();
-      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, r, 0, Math.PI * 2);
+      ctx.clip();
+      drawBallNumberPole(ball, ball.px, ball.py, ball.pz);
+      drawBallNumberPole(ball, -ball.px, -ball.py, -ball.pz);
+      ctx.restore();
     }
 
     if (ball.type === "cue") {
-      if (ball.pz > 0.1) {
-        ctx.fillStyle = "rgba(220, 38, 38, 0.48)";
-        ctx.beginPath();
-        ctx.arc(
-          ball.x + ball.px * r * 0.72,
-          ball.y + ball.py * r * 0.72,
-          2.0 * Math.max(0.4, ball.pz),
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
-      }
-      if (-ball.pz > 0.1) {
-        ctx.fillStyle = "rgba(30, 41, 59, 0.35)";
-        ctx.beginPath();
-        ctx.arc(
-          ball.x - ball.px * r * 0.72,
-          ball.y - ball.py * r * 0.72,
-          2.0 * Math.max(0.4, -ball.pz),
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
+      // Classic 6-dot Pro-Cup rolling reference spots (p, -p, s, -s, t, -t)
+      const tx = ball.py * ball.sz - ball.pz * ball.sy;
+      const ty = ball.pz * ball.sx - ball.px * ball.sz;
+      const tz = ball.px * ball.sy - ball.py * ball.sx;
+      const cueDots: [number, number, number][] = [
+        [ball.px, ball.py, ball.pz],
+        [-ball.px, -ball.py, -ball.pz],
+        [ball.sx, ball.sy, ball.sz],
+        [-ball.sx, -ball.sy, -ball.sz],
+        [tx, ty, tz],
+        [-tx, -ty, -tz],
+      ];
+      for (let d = 0; d < cueDots.length; d++) {
+        const [dx, dy, dz] = cueDots[d];
+        if (dz > 0.15) {
+          ctx.fillStyle = "rgba(220, 38, 38, 0.42)";
+          ctx.beginPath();
+          ctx.arc(
+            ball.x + dx * r * 0.82,
+            ball.y + dy * r * 0.82,
+            1.7 * Math.max(0.45, dz),
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
       }
       if (!isShooting && (Math.abs(spinX) > 0.05 || Math.abs(spinY) > 0.05)) {
         ctx.fillStyle = "#ef4444";
@@ -323,14 +369,26 @@ export function renderTableScene({
     }
   }
 
-  // 4. Ball in Hand Placement Guide
+  // 4. Ball in Hand Placement Guide (shows cue ball preview even when scratched)
   if (isBallInHand && ballInHandHoverPos) {
-    ctx.fillStyle = "rgba(59, 130, 246, 0.35)";
+    ctx.fillStyle = "#f8fafc";
+    ctx.beginPath();
+    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, BALL_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    if (glossCanvas) {
+      ctx.drawImage(
+        glossCanvas,
+        ballInHandHoverPos.x - BALL_RADIUS - 1,
+        ballInHandHoverPos.y - BALL_RADIUS - 1
+      );
+    }
+
+    ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
     ctx.strokeStyle = "#3b82f6";
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, BALL_RADIUS + 2, 0, Math.PI * 2);
+    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, BALL_RADIUS + 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
