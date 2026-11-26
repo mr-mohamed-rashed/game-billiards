@@ -7,20 +7,26 @@ import {
   DEFAULT_TABLE_GEOMETRY,
   GameMode,
   Pocket,
+  SNOOKER_COLOR_ORDER,
+  SnookerTargetInfo,
   TABLE_HEIGHT,
   TABLE_WIDTH,
   TableGeometry,
+  getBreakLineX,
+  getSnookerSpots,
 } from "@/types/billiards";
 import { playBallClack, playPocketDrop } from "@/utils/audio";
 
 export function clampBallInHandPos(
   x: number,
   y: number,
-  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
+  maxAllowedX?: number
 ): { x: number; y: number } {
   const { bounds } = geom;
+  const upperX = maxAllowedX !== undefined ? Math.min(bounds.maxX - 2, maxAllowedX) : bounds.maxX - 2;
   return {
-    x: Math.min(bounds.maxX - 2, Math.max(bounds.minX + 2, x)),
+    x: Math.min(upperX, Math.max(bounds.minX + 2, x)),
     y: Math.min(bounds.maxY - 2, Math.max(bounds.minY + 2, y)),
   };
 }
@@ -48,16 +54,23 @@ function makeBallAxes(seed: number) {
 
 export function findFreeCueBallPos(
   balls: Ball[],
-  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
+  maxAllowedX?: number
 ): { x: number; y: number } {
   const { bounds } = geom;
-  const headX = bounds.minX + (bounds.maxX - bounds.minX) * 0.25;
   const centerY = (bounds.minY + bounds.maxY) / 2;
+  const rawHeadX =
+    maxAllowedX !== undefined
+      ? Math.max(bounds.minX + 18, maxAllowedX - 32)
+      : bounds.minX + (bounds.maxX - bounds.minX) * 0.25;
+  const headX = clampBallInHandPos(rawHeadX, centerY, geom, maxAllowedX).x;
+  const startY = maxAllowedX !== undefined ? centerY + 26 : centerY;
   const minGap = BALL_RADIUS * 2.25;
 
   const isFree = (cx: number, cy: number) =>
     !balls.some((b, idx) => idx > 0 && !b.isPotted && Math.hypot(b.x - cx, b.y - cy) < minGap);
 
+  if (isFree(headX, startY)) return { x: headX, y: startY };
   if (isFree(headX, centerY)) return { x: headX, y: centerY };
 
   for (let ring = 1; ring <= 14; ring++) {
@@ -65,18 +78,24 @@ export function findFreeCueBallPos(
     const steps = 8 + ring * 2;
     for (let k = 0; k < steps; k++) {
       const ang = (k / steps) * Math.PI * 2;
-      const cand = clampBallInHandPos(headX + Math.cos(ang) * rad, centerY + Math.sin(ang) * rad, geom);
+      const cand = clampBallInHandPos(
+        headX + Math.cos(ang) * rad,
+        centerY + Math.sin(ang) * rad,
+        geom,
+        maxAllowedX
+      );
       if (isFree(cand.x, cand.y)) return cand;
     }
   }
-  return { x: headX, y: centerY };
+  return { x: headX, y: startY };
 }
 
 export function placeCueBallSafely(
   balls: Ball[],
-  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
+  maxAllowedX?: number
 ): { x: number; y: number } {
-  const pos = findFreeCueBallPos(balls, geom);
+  const pos = findFreeCueBallPos(balls, geom, maxAllowedX);
   const cb = balls[0];
   if (cb) {
     cb.x = pos.x;
@@ -88,6 +107,46 @@ export function placeCueBallSafely(
   return pos;
 }
 
+export function moveBreakCueBall(
+  x: number,
+  y: number,
+  balls: Ball[],
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
+  maxAllowedX?: number
+): boolean {
+  const cueBall = balls[0];
+  if (!cueBall || cueBall.isPotted) return false;
+
+  let cand = clampBallInHandPos(x, y, geom, maxAllowedX);
+  const minGap = BALL_RADIUS * 2.15;
+
+  const overlapsAny = (cx: number, cy: number) =>
+    balls.some((b, idx) => idx > 0 && !b.isPotted && Math.hypot(b.x - cx, b.y - cy) < minGap);
+
+  if (overlapsAny(cand.x, cand.y)) {
+    // Nudge gently around blocking baulk ball so dragging feels smooth
+    const blocker = balls.find((b, idx) => idx > 0 && !b.isPotted && Math.hypot(b.x - cand.x, b.y - cand.y) < minGap);
+    if (blocker) {
+      const dx = cand.x - blocker.x;
+      const dy = cand.y - blocker.y;
+      const d = Math.hypot(dx, dy) || 1;
+      cand = clampBallInHandPos(
+        blocker.x + (dx / d) * (minGap + 1),
+        blocker.y + (dy / d) * (minGap + 1),
+        geom,
+        maxAllowedX
+      );
+    }
+    if (overlapsAny(cand.x, cand.y)) return false;
+  }
+
+  cueBall.x = cand.x;
+  cueBall.y = cand.y;
+  cueBall.vx = 0;
+  cueBall.vy = 0;
+  return true;
+}
+
 export function initBallsRack(
   mode: GameMode,
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
@@ -97,11 +156,12 @@ export function initBallsRack(
   const tableLeft = bounds.minX;
   const tableRight = bounds.maxX;
   const centerY = (bounds.minY + bounds.maxY) / 2;
+  const breakLineX = getBreakLineX(mode, geom);
 
   balls.push({
     id: 0,
-    x: tableLeft + (tableRight - tableLeft) * 0.25,
-    y: centerY,
+    x: mode === "snooker" ? Math.max(tableLeft + 18, breakLineX - 32) : breakLineX,
+    y: mode === "snooker" ? centerY + 26 : centerY,
     vx: 0,
     vy: 0,
     radius: BALL_RADIUS,
@@ -148,7 +208,7 @@ export function initBallsRack(
     }
   } else {
     let sId = 1;
-    const apexX = tableLeft + (tableRight - tableLeft) * 0.75;
+    const { apexX, spots } = getSnookerSpots(geom);
     const spacing = BALL_RADIUS * 2.05;
     const rowSpacing = spacing * Math.cos(Math.PI / 6);
 
@@ -174,16 +234,7 @@ export function initBallsRack(
       }
     }
 
-    const baulkX = tableLeft + (tableRight - tableLeft) * 0.22;
-    const colors = [
-      { color: "#facc15", val: 2, x: baulkX, y: centerY + 60 },
-      { color: "#16a34a", val: 3, x: baulkX, y: centerY - 60 },
-      { color: "#78350f", val: 4, x: baulkX, y: centerY },
-      { color: "#2563eb", val: 5, x: TABLE_WIDTH / 2, y: centerY },
-      { color: "#ec4899", val: 6, x: apexX - 25, y: centerY },
-      { color: "#09090b", val: 7, x: tableRight - 55, y: centerY },
-    ];
-    colors.forEach((c) => {
+    spots.forEach((c) => {
       const axes = makeBallAxes(c.val);
       balls.push({
         id: sId++,
@@ -211,13 +262,76 @@ export function respotBall(
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
 ) {
   const { bounds } = geom;
+  const minGap = BALL_RADIUS * 2.08;
+  const isSpotFree = (tx: number, ty: number) =>
+    !balls.some((b) => b.id !== ball.id && !b.isPotted && Math.hypot(b.x - tx, b.y - ty) < minGap);
+
+  if (ball.type === "color") {
+    const { spots, centerY } = getSnookerSpots(geom);
+    const ownSpot = spots.find((s) => s.val === ball.value) || spots[spots.length - 1];
+    let targetX = ownSpot.x;
+    let targetY = ownSpot.y;
+    let placed = isSpotFree(targetX, targetY);
+
+    // Official Snooker rule: if own spot is occupied, try highest-value unoccupied spot
+    if (!placed) {
+      const descValues = [...SNOOKER_COLOR_ORDER].reverse();
+      for (const val of descValues) {
+        const altSpot = spots.find((s) => s.val === val);
+        if (altSpot && isSpotFree(altSpot.x, altSpot.y)) {
+          targetX = altSpot.x;
+          targetY = altSpot.y;
+          placed = true;
+          break;
+        }
+      }
+    }
+
+    // Fallback: closest free spot along center line toward top cushion, then spiral
+    if (!placed) {
+      for (let step = 1; step <= 18; step++) {
+        const candX = Math.min(bounds.maxX - 2, ownSpot.x + step * BALL_RADIUS * 2.15);
+        if (isSpotFree(candX, centerY)) {
+          targetX = candX;
+          targetY = centerY;
+          placed = true;
+          break;
+        }
+      }
+    }
+    if (!placed) {
+      for (let ring = 1; ring <= 14 && !placed; ring++) {
+        const rad = ring * BALL_RADIUS * 2.15;
+        const steps = 8 + ring * 2;
+        for (let k = 0; k < steps; k++) {
+          const ang = (k / steps) * Math.PI * 2;
+          const cand = clampBallInHandPos(ownSpot.x + Math.cos(ang) * rad, ownSpot.y + Math.sin(ang) * rad, geom);
+          if (isSpotFree(cand.x, cand.y)) {
+            targetX = cand.x;
+            targetY = cand.y;
+            placed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    ball.isPotted = false;
+    ball.x = targetX;
+    ball.y = targetY;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.spinSide = 0;
+    return;
+  }
+
   const footSpotX = bounds.minX + (bounds.maxX - bounds.minX) * 0.72;
   const footSpotY = (bounds.minY + bounds.maxY) / 2;
 
   let targetX = footSpotX;
   let targetY = footSpotY;
 
-  while (balls.some((b) => !b.isPotted && Math.hypot(b.x - targetX, b.y - targetY) < BALL_RADIUS * 2.1)) {
+  while (!isSpotFree(targetX, targetY)) {
     targetX += BALL_RADIUS * 2.2;
     if (targetX > bounds.maxX - 5) {
       targetX = footSpotX;
@@ -230,6 +344,7 @@ export function respotBall(
   ball.y = targetY;
   ball.vx = 0;
   ball.vy = 0;
+  ball.spinSide = 0;
 }
 
 export function getCueForceMultiplier(cue: CueItem): number {
@@ -309,13 +424,15 @@ export function stepPhysics({
   const geom = tableCfg.geometry;
   const { bounds, railSpans, pockets, jaws } = geom;
 
-  // True Coulomb rolling deceleration + light high-speed cloth slide (varies per table cloth)
-  const clothFactor = Math.max(0.55, (1 - tableCfg.friction) / 0.015);
+  // Smooth exponential cloth damping + gentle tapered rolling resistance (no abrupt brake feel)
+  const linearDamping = tableCfg.clothFriction ?? tableCfg.friction ?? 0.9927;
+  const rollingResistance = tableCfg.rollingResistance ?? 0.012;
   const effectiveScale = dtNorm * timeScale;
   const invSub = effectiveScale / SUB_STEPS;
-  const slideDragSub = Math.pow(1 - 0.004 * clothFactor, invSub);
-  const rollingDecelSub = 0.095 * clothFactor * invSub;
-  const CUSHION_BOUNCE = tableCfg.bounceRestitution;
+  const slideDragSub = Math.pow(linearDamping, invSub);
+  const rollingDecelSub = rollingResistance * invSub;
+  const CUSHION_BOUNCE = tableCfg.cushionRestitution ?? tableCfg.bounceRestitution ?? 0.805;
+  const cushionSpinGrip = tableCfg.spinGrip ?? 1.0;
   const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
 
   // Legendary Cue Perks
@@ -336,7 +453,8 @@ export function stepPhysics({
 
       const rawSpeed = Math.hypot(ball.vx, ball.vy);
       if (rawSpeed > 0.0001) {
-        const nextSpeed = Math.max(0, rawSpeed * slideDragSub - rollingDecelSub);
+        const lowSpeedTaper = rawSpeed < 0.75 ? 0.45 + 0.55 * (rawSpeed / 0.75) : 1.0;
+        const nextSpeed = Math.max(0, rawSpeed * slideDragSub - rollingDecelSub * lowSpeedTaper);
         const ratio = nextSpeed / rawSpeed;
         ball.vx *= ratio;
         ball.vy *= ratio;
@@ -344,7 +462,7 @@ export function stepPhysics({
 
       const speed = Math.hypot(ball.vx, ball.vy);
 
-      // Straight Rubber Cushion Rails (per-table calibrated inner borders + Side English)
+      // Straight Rubber Cushion Rails (per-table calibrated inner borders + Side English & Cushion Grip)
       const applyRailSpin = (nx: number, ny: number) => {
         const eng = ball.spinSide || 0;
         if (Math.abs(eng) > 0.05 && speed > 1.2) {
@@ -352,7 +470,7 @@ export function stepPhysics({
           // Clockwise top-down spin (Left / spinX < 0) kicks along tangent (-ny, nx) = shooter's LEFT
           const tx = -ny;
           const ty = nx;
-          const kick = -eng * (0.34 * vn + 2.4) * CUSHION_BOUNCE;
+          const kick = -eng * (0.34 * vn + 2.4) * CUSHION_BOUNCE * cushionSpinGrip;
           ball.vx += tx * kick;
           ball.vy += ty * kick;
           ball.spinSide = eng * 0.42;
@@ -532,7 +650,7 @@ export function stepPhysics({
               const cosAim = Math.cos(activeShotAimAngle);
               const sinAim = Math.sin(activeShotAimAngle);
               // hitDirectness: 1.0 for straight center hit, -> 0 for thin edge graze
-              const impactSpd = Math.max(4, prevCueSpeed);
+              const impactSpd = Math.max(1.5, prevCueSpeed);
               const hitDirectness =
                 prevCueSpeed > 0.2
                   ? Math.max(0.25, Math.min(1, Math.abs((prevCueVx / prevCueSpeed) * nx + (prevCueVy / prevCueSpeed) * ny)))
@@ -543,13 +661,13 @@ export function stepPhysics({
                 cueB.vx *= 0.15;
                 cueB.vy *= 0.15;
               } else if (spinY > 0.15) {
-                // Bottom hit -> Screw / Draw straight backward toward shooter
-                const screwMag = spinY * (0.62 * impactSpd + 3.0) * hitDirectness * cueSpinBonus * screwPerkMult;
+                // Bottom hit -> Screw / Draw proportional to hit force
+                const screwMag = spinY * (0.62 * impactSpd + Math.min(2.4, 0.32 * impactSpd)) * hitDirectness * cueSpinBonus * screwPerkMult;
                 cueB.vx -= cosAim * screwMag;
                 cueB.vy -= sinAim * screwMag;
               } else if (spinY < -0.15) {
-                // Top hit -> Follow forward behind target ball
-                const followMag = Math.abs(spinY) * (0.58 * impactSpd + 2.8) * hitDirectness * cueSpinBonus;
+                // Top hit -> Follow forward proportional to hit force
+                const followMag = Math.abs(spinY) * (0.58 * impactSpd + Math.min(2.2, 0.28 * impactSpd)) * hitDirectness * cueSpinBonus;
                 cueB.vx += cosAim * followMag;
                 cueB.vy += sinAim * followMag;
               }
@@ -557,7 +675,7 @@ export function stepPhysics({
                 // Side spin deflects Left (-sinAim, +cosAim) when spinX < 0, Right when spinX > 0
                 const rightX = -sinAim;
                 const rightY = cosAim;
-                const sideMag = spinX * (0.28 * impactSpd + 2.2) * cueSpinBonus;
+                const sideMag = spinX * (0.28 * impactSpd + Math.min(1.8, 0.22 * impactSpd)) * cueSpinBonus;
                 cueB.vx += rightX * sideMag;
                 cueB.vy += rightY * sideMag;
               }
@@ -579,7 +697,7 @@ export function stepPhysics({
       ball.vy = (ball.vy / curSpeed) * MAX_SPEED;
       curSpeed = MAX_SPEED;
     }
-    if (curSpeed <= 0.04) {
+    if (curSpeed <= 0.015) {
       ball.vx = 0;
       ball.vy = 0;
       ball.spinSide = 0;
@@ -659,7 +777,8 @@ export function computeBotShot(
   balls: Ball[],
   botGroup: BallGroup,
   mode: GameMode,
-  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
+  snookerTarget?: SnookerTargetInfo
 ): BotShotPlan | null {
   const cueBall = balls[0];
   if (!cueBall || cueBall.isPotted) return null;
@@ -673,6 +792,11 @@ export function computeBotShot(
       return botBallsLeft ? b.type === botType : b.number === 8;
     }
     if (mode === "8-ball") return b.number !== 8;
+    if (mode === "snooker" && snookerTarget) {
+      if (snookerTarget.phase === "red") return b.type === "red";
+      if (snookerTarget.phase === "color") return b.type === "color";
+      return b.type === "color" && b.value === snookerTarget.expectedValue;
+    }
     return true;
   });
 
@@ -715,6 +839,9 @@ export function computeBotShot(
       const clearBallToPocket = isSegmentClear(target.x, target.y, p.x, p.y, balls, ignore);
 
       let score = cutDot * 120 - (distCG + distBP) * 0.08;
+      if (mode === "snooker" && snookerTarget?.phase === "color") {
+        score += (target.value || 2) * 6;
+      }
       if (!clearCueToGhost) score -= 200;
       if (!clearBallToPocket) score -= 180;
 

@@ -12,6 +12,8 @@ import {
   GameMode,
   TABLE_HEIGHT,
   TABLE_WIDTH,
+  getBreakLineX,
+  getSnookerTargetInfo,
 } from "@/types/billiards";
 import {
   playBallClack,
@@ -27,6 +29,7 @@ import {
   findFreeCueBallPos,
   getCueForceMultiplier,
   initBallsRack,
+  moveBreakCueBall,
   placeCueBallSafely,
   stepPhysics,
 } from "@/engine/physics";
@@ -108,6 +111,10 @@ function CueMasterApp() {
 
   const [calledPocketId, setCalledPocketId] = useState<number | null>(null);
   const [isBallInHand, setIsBallInHand] = useState(false);
+  const [isBreakShot, setIsBreakShot] = useState(true);
+  const [humanScore, setHumanScore] = useState(0);
+  const [botScore, setBotScore] = useState(0);
+  const [snookerOnColorAfterRed, setSnookerOnColorAfterRed] = useState(false);
   const [spinX, setSpinX] = useState(0);
   const [spinY, setSpinY] = useState(0);
   const [showSpinPopover, setShowSpinPopover] = useState(false);
@@ -143,6 +150,7 @@ function CueMasterApp() {
   // Gesture & Shot Refs
   const isAimDraggingRef = useRef(false);
   const isDraggingBallInHandRef = useRef(false);
+  const isDraggingBreakCueRef = useRef(false);
   const isSpinDraggingRef = useRef(false);
   const isVerticalMeterDraggingRef = useRef(false);
   const aimAngleRef = useRef(0);
@@ -156,10 +164,14 @@ function CueMasterApp() {
   const isShootingRef = useRef(false);
   const botAimVisibleRef = useRef(false);
   const isBallInHandRef = useRef(false);
+  const isBreakShotRef = useRef(true);
   const ballInHandHoverPosRef = useRef<{ x: number; y: number } | null>(null);
   const turnRef = useRef<"human" | "bot">("human");
   const humanGroupRef = useRef<BallGroup>("unassigned");
   const botGroupRef = useRef<BallGroup>("unassigned");
+  const humanScoreRef = useRef(0);
+  const botScoreRef = useRef(0);
+  const snookerOnColorAfterRedRef = useRef(false);
   const soundEnabledRef = useRef(true);
   const aimAssistLongRef = useRef(true);
   const selectedCueRef = useRef("cue_maple_standard");
@@ -298,17 +310,30 @@ function CueMasterApp() {
   const handleTurnTimeout = () => {
     if (soundEnabledRef.current) playFoulBuzzer();
     const activeGeom = getActiveGeom();
+    const baulkMaxX = modeRef.current === "snooker" ? getBreakLineX("snooker", activeGeom) : undefined;
+    isBreakShotRef.current = false;
+    isDraggingBreakCueRef.current = false;
+    setIsBreakShot(false);
+    if (modeRef.current === "snooker") {
+      snookerOnColorAfterRedRef.current = false;
+      setSnookerOnColorAfterRed(false);
+    }
+
     if (!isPracticeRef.current) {
       const nextTurn = turnRef.current === "human" ? "bot" : "human";
       if (nextTurn === "human") {
-        ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom);
+        ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom, baulkMaxX);
         isBallInHandRef.current = true;
         setIsBallInHand(true);
         turnRef.current = "human";
         setTurn("human");
-        setTurnMessage("⏱️ انتهى وقت الخصم! الفاول لصالحك، اسحب الكرة البيضاء 🧤");
+        setTurnMessage(
+          modeRef.current === "snooker"
+            ? "⏱️ انتهى وقت الخصم! ضع الكرة البيضاء خلف الخط 🧤"
+            : "⏱️ انتهى وقت الخصم! الفاول لصالحك، اسحب الكرة البيضاء 🧤"
+        );
       } else {
-        placeCueBallSafely(ballsRef.current, activeGeom);
+        placeCueBallSafely(ballsRef.current, activeGeom, baulkMaxX);
         isBallInHandRef.current = false;
         setIsBallInHand(false);
         turnRef.current = "bot";
@@ -316,7 +341,7 @@ function CueMasterApp() {
         setTurnMessage("⚠️ انتهى وقتك! الكرة في يد الخصم.");
       }
     } else {
-      ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom);
+      ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom, baulkMaxX);
       isBallInHandRef.current = true;
       setIsBallInHand(true);
       setTurnMessage("⏱️ انتهى وقت التصويب في التدريب!");
@@ -345,19 +370,33 @@ function CueMasterApp() {
     ballsRef.current = initBallsRack(currentMode, getActiveGeom());
     humanGroupRef.current = "unassigned";
     botGroupRef.current = "unassigned";
+    humanScoreRef.current = 0;
+    botScoreRef.current = 0;
+    snookerOnColorAfterRedRef.current = false;
     turnRef.current = "human";
     isBallInHandRef.current = false;
+    isBreakShotRef.current = true;
+    isDraggingBreakCueRef.current = false;
     isShootingRef.current = false;
     botAimVisibleRef.current = false;
     ballInHandHoverPosRef.current = null;
     calledPocketIdRef.current = null;
+    aimAngleRef.current = 0;
     powerRef.current = 0;
     setHumanGroup("unassigned");
     setBotGroup("unassigned");
+    setHumanScore(0);
+    setBotScore(0);
+    setSnookerOnColorAfterRed(false);
     setGroupAnnouncement(null);
     setTurn("human");
-    setTurnMessage("طاولة مفتوحة: أسقط أي كرة لتحديد صنفك!");
+    setTurnMessage(
+      currentMode === "snooker"
+        ? "🔴 ضربة البداية: حرّك الكرة البيضاء خلف الخط وصوّب على المثلث!"
+        : "🎱 ضربة البداية: حرّك الكرة البيضاء خلف الخط وصوّب على المثلث!"
+    );
     setIsBallInHand(false);
+    setIsBreakShot(true);
     setIsShooting(false);
     setCalledPocketId(null);
     setPower(0);
@@ -473,11 +512,13 @@ function CueMasterApp() {
         turn: turnRef.current,
         isPractice: isPracticeRef.current,
         isShooting: isShootingRef.current,
+        isBreakShot: isBreakShotRef.current,
         isBotAiming: botAimVisibleRef.current,
         isBallInHand: isBallInHandRef.current,
         ballInHandHoverPos: ballInHandHoverPosRef.current,
         calledPocketId: calledPocketIdRef.current,
         humanGroup: humanGroupRef.current,
+        snookerTarget: getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current),
         aimAngle: aimAngleRef.current,
         power: powerRef.current,
         spinX: spinXRef.current,
@@ -575,6 +616,17 @@ function CueMasterApp() {
           targetPocketForThisShot: activeShotCalledPocketRef.current,
           humanGroup: humanGroupRef.current,
           botGroup: botGroupRef.current,
+          snookerOnColorAfterRed: snookerOnColorAfterRedRef.current,
+          humanScore: humanScoreRef.current,
+          botScore: botScoreRef.current,
+          onSnookerUpdate: ({ humanScore: hs, botScore: bs, onColorAfterRed }) => {
+            humanScoreRef.current = hs;
+            botScoreRef.current = bs;
+            snookerOnColorAfterRedRef.current = onColorAfterRed;
+            setHumanScore(hs);
+            setBotScore(bs);
+            setSnookerOnColorAfterRed(onColorAfterRed);
+          },
           onGameOver: triggerGameOver,
           onAssignGroups: (hGrp, bGrp, announcement) => {
             humanGroupRef.current = hGrp;
@@ -627,8 +679,11 @@ function CueMasterApp() {
     };
   };
 
+  const getBallInHandMaxX = () =>
+    modeRef.current === "snooker" ? getBreakLineX("snooker", getActiveGeom()) : undefined;
+
   const tryPlaceBallInHand = (x: number, y: number) => {
-    const clamped = clampBallInHandPos(x, y, getActiveGeom());
+    const clamped = clampBallInHandPos(x, y, getActiveGeom(), getBallInHandMaxX());
     const isOverlapping = ballsRef.current
       .slice(1)
       .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < BALL_RADIUS * 2.2);
@@ -656,9 +711,15 @@ function CueMasterApp() {
     const coords = getCanvasCoords(e.clientX, e.clientY);
     if (!coords) return;
 
+    if (isDraggingBreakCueRef.current && isBreakShotRef.current) {
+      const geom = getActiveGeom();
+      moveBreakCueBall(coords.x, coords.y, ballsRef.current, geom, getBreakLineX(modeRef.current, geom));
+      return;
+    }
+
     if (isBallInHandRef.current) {
       if (isDraggingBallInHandRef.current || e.pointerType === "mouse") {
-        ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom());
+        ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX());
       }
       return;
     }
@@ -679,26 +740,41 @@ function CueMasterApp() {
     const coords = getCanvasCoords(e.clientX, e.clientY);
     if (!coords) return;
 
-    const clickedPocket = getActiveGeom().pockets.find(
-      (p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 38
-    );
-    if (clickedPocket && !isBallInHandRef.current) {
-      calledPocketIdRef.current = clickedPocket.id;
-      setCalledPocketId(clickedPocket.id);
-      if (soundEnabledRef.current) playBallClack(3);
-      return;
+    if (modeRef.current === "8-ball") {
+      const clickedPocket = getActiveGeom().pockets.find(
+        (p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 38
+      );
+      if (clickedPocket && !isBallInHandRef.current) {
+        calledPocketIdRef.current = clickedPocket.id;
+        setCalledPocketId(clickedPocket.id);
+        if (soundEnabledRef.current) playBallClack(3);
+        return;
+      }
     }
 
     if (isBallInHandRef.current) {
       isDraggingBallInHandRef.current = true;
-      ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom());
+      ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX());
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
       return;
     }
 
     if ((turnRef.current === "human" || isPracticeRef.current) && !isShootingRef.current) {
-      isAimDraggingRef.current = true;
       const cueBall = ballsRef.current[0];
+      if (
+        isBreakShotRef.current &&
+        cueBall &&
+        !cueBall.isPotted &&
+        Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= BALL_RADIUS * 2.8
+      ) {
+        isDraggingBreakCueRef.current = true;
+        const geom = getActiveGeom();
+        moveBreakCueBall(coords.x, coords.y, ballsRef.current, geom, getBreakLineX(modeRef.current, geom));
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+        return;
+      }
+
+      isAimDraggingRef.current = true;
       if (cueBall) {
         aimAngleRef.current = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
       }
@@ -707,10 +783,16 @@ function CueMasterApp() {
   };
 
   const handleCanvasPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (isDraggingBreakCueRef.current) {
+      isDraggingBreakCueRef.current = false;
+      if (soundEnabledRef.current) playBallClack(3);
+    }
     if (isBallInHandRef.current && isDraggingBallInHandRef.current) {
       isDraggingBallInHandRef.current = false;
       const coords = getCanvasCoords(e.clientX, e.clientY);
-      const target = coords ? clampBallInHandPos(coords.x, coords.y, getActiveGeom()) : ballInHandHoverPosRef.current;
+      const target = coords
+        ? clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX())
+        : ballInHandHoverPosRef.current;
       if (target) tryPlaceBallInHand(target.x, target.y);
     }
     isAimDraggingRef.current = false;
@@ -720,6 +802,7 @@ function CueMasterApp() {
   const handleCanvasPointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     isAimDraggingRef.current = false;
     isDraggingBallInHandRef.current = false;
+    isDraggingBreakCueRef.current = false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
   };
 
@@ -832,6 +915,9 @@ function CueMasterApp() {
     shotStartPosRef.current = { x: cueBall.x, y: cueBall.y };
     cinematicTriggeredThisShotRef.current = false;
 
+    isBreakShotRef.current = false;
+    isDraggingBreakCueRef.current = false;
+    setIsBreakShot(false);
     isShootingRef.current = true;
     setIsShooting(true);
     if (soundEnabledRef.current) playCueStrike(shotPower);
@@ -859,9 +945,11 @@ function CueMasterApp() {
         const cueBall = ballsRef.current[0];
         if (!cueBall) return;
         const activeGeom = getActiveGeom();
-        if (cueBall.isPotted) placeCueBallSafely(ballsRef.current, activeGeom);
+        const baulkMaxX = modeRef.current === "snooker" ? getBreakLineX("snooker", activeGeom) : undefined;
+        if (cueBall.isPotted) placeCueBallSafely(ballsRef.current, activeGeom, baulkMaxX);
 
-        const plan = computeBotShot(ballsRef.current, botGroupRef.current, modeRef.current, activeGeom);
+        const snookerTarget = getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current);
+        const plan = computeBotShot(ballsRef.current, botGroupRef.current, modeRef.current, activeGeom, snookerTarget);
         if (!plan) return;
 
         calledPocketIdRef.current = plan.pocketId;
@@ -1010,6 +1098,16 @@ function CueMasterApp() {
     return ballsRef.current.filter((b) => !b.isPotted && b.number !== 8 && b.type === expected).length;
   })();
 
+  const snookerTarget = (() => {
+    void ballsVersion;
+    return getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRed);
+  })();
+
+  const snookerRedsLeft = (() => {
+    void ballsVersion;
+    return ballsRef.current.filter((b) => !b.isPotted && b.type === "red").length;
+  })();
+
   const rotatedStyle =
     isVirtualLandscape && isPortrait
       ? {
@@ -1066,6 +1164,7 @@ function CueMasterApp() {
           style={rotatedStyle ? { ...rotatedStyle, zIndex: 50 } : undefined}
         >
           <TableHUD
+            mode={mode}
             username={username}
             avatar={avatar}
             opponentName={opponentName}
@@ -1081,6 +1180,10 @@ function CueMasterApp() {
             botGroup={botGroup}
             humanRemainingBalls={humanRemainingBalls}
             botRemainingCount={botRemainingCount}
+            humanScore={humanScore}
+            botScore={botScore}
+            snookerTarget={snookerTarget}
+            snookerRedsLeft={snookerRedsLeft}
             spinX={spinX}
             spinY={spinY}
             showSpinPopover={showSpinPopover}
@@ -1165,11 +1268,22 @@ function CueMasterApp() {
                   dir="rtl"
                   className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-blue-950/95 border border-blue-400 text-blue-100 px-3 py-1 rounded-full text-[10px] font-black shadow-lg pointer-events-none whitespace-nowrap"
                 >
-                  🧤 الكرة في يدك: اسحبها على الطاولة ثم ارفع إصبعك
+                  {mode === "snooker"
+                    ? "🧤 الكرة في يدك: ضعها في أي مكان خلف الخط ثم ارفع إصبعك"
+                    : "🧤 الكرة في يدك: اسحبها على الطاولة ثم ارفع إصبعك"}
                 </div>
               )}
 
-              {!isBallInHand && (
+              {!isBallInHand && isBreakShot && !isShooting && (turn === "human" || isPractice) && (
+                <div
+                  dir="rtl"
+                  className="absolute top-1.5 left-1/2 -translate-x-1/2 z-20 bg-cyan-950/90 border border-cyan-400/70 text-cyan-100 px-3 py-0.5 rounded-full text-[10px] font-black shadow-lg pointer-events-none whitespace-nowrap"
+                >
+                  ↔️ ضربة البداية: اسحب الكرة البيضاء خلف الخط وصوّب على المثلث
+                </div>
+              )}
+
+              {!isBallInHand && !(isBreakShot && !isShooting && (turn === "human" || isPractice)) && (
                 <div
                   dir="rtl"
                   className="sm:hidden absolute top-1.5 left-1/2 -translate-x-1/2 z-20 bg-slate-950/85 border border-slate-800 text-amber-200 px-2.5 py-0.5 rounded-full text-[9px] font-bold pointer-events-none max-w-[85%] truncate"

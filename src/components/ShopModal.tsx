@@ -287,9 +287,21 @@ export function ShopModal({
 
                     <p className="text-[11px] text-slate-400 mb-2">{table.descriptionAr}</p>
 
-                    <div className="flex items-center justify-between text-[10px] text-slate-300 bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-slate-800 mb-2.5">
-                      <span>الانزلاق: {table.friction > 0.985 ? "سريع ناعم ❄️" : "قياسي متزن 🟢"}</span>
-                      <span>الارتداد: {table.bounceRestitution > 0.86 ? "قوي 🔥" : "دولي 🎱"}</span>
+                    <div className="grid grid-cols-3 gap-1.5 text-[9px] text-slate-300 bg-slate-900/80 px-2 py-1.5 rounded-lg border border-slate-800 mb-2.5 text-center">
+                      <div>
+                        <span className="text-slate-400 block">المستوى</span>
+                        <span className="font-bold text-cyan-300">{table.tierLabelAr}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">الارتداد والجوخ</span>
+                        <span className="font-bold text-amber-300">
+                          {Math.round(table.cushionRestitution * 100)}% • {table.tier === "pro" ? "5 أطوال" : table.tier === "intermediate" ? "4.5 أطوال" : "4 أطوال"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">استجابة الإسبين</span>
+                        <span className="font-bold text-emerald-300">{Math.round(table.spinGrip * 100)}%</span>
+                      </div>
                     </div>
 
                     <button

@@ -1,7 +1,14 @@
 "use client";
 
 import React from "react";
-import { Ball, BallGroup, POCKETS } from "@/types/billiards";
+import {
+  Ball,
+  BallGroup,
+  GameMode,
+  POCKETS,
+  SNOOKER_COLOR_META,
+  SnookerTargetInfo,
+} from "@/types/billiards";
 
 interface AvatarTimerProps {
   src: string;
@@ -43,6 +50,7 @@ function AvatarTimer({ src, alt, isActive, timeLeft, totalTime, borderColorClass
 }
 
 interface TableHUDProps {
+  mode: GameMode;
   username: string;
   avatar: string;
   opponentName: string;
@@ -58,6 +66,10 @@ interface TableHUDProps {
   botGroup: BallGroup;
   humanRemainingBalls: Ball[];
   botRemainingCount: number;
+  humanScore: number;
+  botScore: number;
+  snookerTarget: SnookerTargetInfo;
+  snookerRedsLeft: number;
   spinX: number;
   spinY: number;
   showSpinPopover: boolean;
@@ -80,6 +92,7 @@ interface TableHUDProps {
 }
 
 export function TableHUD({
+  mode,
   username,
   avatar,
   opponentName,
@@ -95,6 +108,10 @@ export function TableHUD({
   botGroup,
   humanRemainingBalls,
   botRemainingCount,
+  humanScore,
+  botScore,
+  snookerTarget,
+  snookerRedsLeft,
   spinX,
   spinY,
   showSpinPopover,
@@ -117,9 +134,40 @@ export function TableHUD({
 }: TableHUDProps) {
   const activePocketObj = POCKETS.find((p) => p.id === calledPocketId);
 
+  const renderSnookerTargetBadge = () => {
+    if (snookerTarget.phase === "red") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[9px] font-black text-rose-300">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-600 border border-white/60 inline-block" />
+          <span>حمراء (1) • {snookerRedsLeft}</span>
+        </span>
+      );
+    }
+    if (snookerTarget.phase === "color") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[9px] font-black text-amber-300">
+          <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-blue-500 border border-white/70 inline-block" />
+          <span>اختر أي ملونة</span>
+        </span>
+      );
+    }
+    const meta = SNOOKER_COLOR_META[snookerTarget.expectedValue];
+    return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-black text-cyan-300">
+        <span
+          className="w-2.5 h-2.5 rounded-full border border-white/70 inline-block"
+          style={{ backgroundColor: meta?.color || "#09090b" }}
+        />
+        <span>
+          تصفية: {meta?.nameAr || ""} ({snookerTarget.expectedValue})
+        </span>
+      </span>
+    );
+  };
+
   return (
     <header className="h-11 sm:h-12 shrink-0 flex items-center justify-between gap-1.5 px-2 bg-slate-950/95 border-b border-slate-800/90 z-30">
-      {/* Player + Remaining Ball Tray */}
+      {/* Player + Remaining Ball Tray / Snooker Score */}
       <div className="flex items-center gap-1.5 min-w-0" dir="rtl">
         <AvatarTimer
           src={avatar}
@@ -135,6 +183,11 @@ export function TableHUD({
             <span className="text-[11px] font-black text-amber-300 truncate max-w-[60px] sm:max-w-[90px]">
               {username}
             </span>
+            {mode === "snooker" && (
+              <span className="text-[9px] font-black px-1.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                {humanScore} نقطة
+              </span>
+            )}
             {turn === "human" && !isPractice && (
               <span
                 className={`text-[9px] font-black px-1 rounded font-mono ${
@@ -147,7 +200,9 @@ export function TableHUD({
           </div>
 
           <div className="flex items-center gap-0.5 mt-0.5">
-            {humanGroup === "unassigned" ? (
+            {mode === "snooker" ? (
+              renderSnookerTargetBadge()
+            ) : humanGroup === "unassigned" ? (
               <span className="text-[9px] font-bold text-amber-400">طاولة مفتوحة</span>
             ) : (
               humanRemainingBalls.map((b) => (
@@ -255,45 +310,75 @@ export function TableHUD({
           </button>
         </div>
 
-        {/* Call Pocket Quick Selector */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => {
-              setShowSpinPopover(false);
-              setShowPocketPopover((prev) => !prev);
-            }}
-            className={`h-7 px-2 rounded-lg border text-[10px] font-black flex items-center gap-1 cursor-pointer whitespace-nowrap ${
-              activePocketObj
-                ? "bg-amber-500/20 border-amber-400 text-amber-300"
-                : "bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300"
-            }`}
-            title="تحديد الجيب (مطلوب للكرة 8)"
-          >
-            <span>🎯</span>
-            <span className="hidden md:inline">{activePocketObj ? activePocketObj.name : "مفتوح"}</span>
-          </button>
-
-          {showPocketPopover && (
-            <div
-              dir="rtl"
-              className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border-2 border-amber-400/70 rounded-xl p-2 shadow-2xl grid grid-cols-3 gap-1 w-52"
+        {/* Call Pocket Quick Selector (8-ball) or Snooker Color Values Strip */}
+        {mode === "8-ball" ? (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowSpinPopover(false);
+                setShowPocketPopover((prev) => !prev);
+              }}
+              className={`h-7 px-2 rounded-lg border text-[10px] font-black flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                activePocketObj
+                  ? "bg-amber-500/20 border-amber-400 text-amber-300"
+                  : "bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300"
+              }`}
+              title="تحديد الجيب (مطلوب للكرة 8)"
             >
-              {POCKETS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => onSelectPocket(p.id)}
-                  className={`px-1.5 py-1 rounded text-[9px] font-black cursor-pointer ${
-                    calledPocketId === p.id ? "bg-amber-400 text-slate-950" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              <span>🎯</span>
+              <span className="hidden md:inline">{activePocketObj ? activePocketObj.name : "مفتوح"}</span>
+            </button>
+
+            {showPocketPopover && (
+              <div
+                dir="rtl"
+                className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border-2 border-amber-400/70 rounded-xl p-2 shadow-2xl grid grid-cols-3 gap-1 w-52"
+              >
+                {POCKETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => onSelectPocket(p.id)}
+                    className={`px-1.5 py-1 rounded text-[9px] font-black cursor-pointer ${
+                      calledPocketId === p.id ? "bg-amber-400 text-slate-950" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            className="hidden lg:flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg px-2 py-1"
+            title="ترتيب الكرات الملونة ونقاطها"
+          >
+            {[
+              { val: 2, bg: "#facc15", text: "#0f172a" },
+              { val: 3, bg: "#16a34a", text: "#ffffff" },
+              { val: 4, bg: "#78350f", text: "#ffffff" },
+              { val: 5, bg: "#2563eb", text: "#ffffff" },
+              { val: 6, bg: "#ec4899", text: "#ffffff" },
+              { val: 7, bg: "#09090b", text: "#ffffff" },
+            ].map((c) => {
+              const isExpected =
+                snookerTarget.phase === "clearance" && snookerTarget.expectedValue === c.val;
+              return (
+                <span
+                  key={c.val}
+                  className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black border ${
+                    isExpected ? "border-amber-300 ring-2 ring-amber-400/60 scale-110" : "border-white/40"
                   }`}
+                  style={{ backgroundColor: c.bg, color: c.text }}
                 >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+                  {c.val}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         {/* Prize + Concise Status Pill */}
         <div
@@ -318,6 +403,8 @@ export function TableHUD({
           <div className="text-[9px] font-bold text-slate-400">
             {isPractice
               ? "وضع التدريب"
+              : mode === "snooker"
+              ? `النقاط: ${botScore}`
               : botGroup === "unassigned"
               ? "مفتوحة"
               : `${botGroup === "solids" ? "سادة 🟡" : "ألوان 🔵"} (${botRemainingCount})`}

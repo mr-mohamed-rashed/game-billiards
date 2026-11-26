@@ -1,4 +1,5 @@
 import { DEFAULT_TABLE_GEOMETRY, TableGeometry } from "@/types/billiards";
+import tablesConfig from "./tablesConfig.json";
 
 export interface CueStats {
   force: number;  // 1 to 10
@@ -22,8 +23,12 @@ export interface CueItem {
   specialPerkAr: string;
 }
 
+export type TableTier = 'starter' | 'intermediate' | 'pro';
+
 export interface TableItem {
   id: string;
+  tier: TableTier;
+  tierLabelAr: string;
   nameAr: string;
   nameEn: string;
   image?: string;
@@ -31,6 +36,11 @@ export interface TableItem {
   currency: 'coins' | 'gems';
   cushionGlow: string;
   feltColor: string;
+  cushionRestitution: number;
+  clothFriction: number;
+  rollingResistance: number;
+  spinGrip: number;
+  // Legacy compatibility fields mapped from JSON physics properties
   friction: number;
   bounceRestitution: number;
   descriptionAr: string;
@@ -325,150 +335,25 @@ export const ALL_CUES: CueItem[] = [
   }
 ];
 
-// THE 9 UNIQUE POOL TABLES
-export const ALL_TABLES: TableItem[] = [
-  // 1. Classic Championship (The Master Original)
-  {
-    id: 'classic',
-    nameAr: 'طاولة البطولة الكلاسيكية (الأساسية)',
-    nameEn: 'Classic Championship Wood',
-    image: '/tables/table_classic_pro.jpg',
-    price: 0,
-    currency: 'coins',
-    cushionGlow: '#22c55e',
-    feltColor: '#15803d',
-    friction: 0.985,
-    bounceRestitution: 0.85,
-    descriptionAr: 'طاولة خشب الماهوجني المعتق الكلاسيكية مع قماش صوف ميرينو الأخضر وزوايا النحاس المعتمدة دولياً.',
-    ambientEffect: 'none',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 2. Enchanted Forest
-  {
-    id: 'enchanted_forest',
-    nameAr: 'طاولة الغابة المسحورة (Enchanted Forest)',
-    nameEn: 'Enchanted Druid Forest',
-    image: '/tables/table_enchanted_forest.jpg',
-    price: 20000,
-    currency: 'coins',
-    cushionGlow: '#4ade80',
-    feltColor: '#166534',
-    friction: 0.985,
-    bounceRestitution: 0.86,
-    descriptionAr: 'إطارات من أغصان الشجر الأزلية وأوراق خضراء حية تمنح الطاولة روح الطبيعة وسحر الغابات الخضراء.',
-    ambientEffect: 'forest',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 3. Glacial Frost Ice
-  {
-    id: 'ice_frost',
-    nameAr: 'طاولة الصقيع والجليد المتجمد (Glacial Frost)',
-    nameEn: 'Glacial Frost Ice Table',
-    image: '/tables/table_ice_frost.jpg',
-    price: 35000,
-    currency: 'coins',
-    cushionGlow: '#38bdf8',
-    feltColor: '#0284c7',
-    friction: 0.988, // Extra slick glide
-    bounceRestitution: 0.88,
-    descriptionAr: 'منحوتة من صقيع القطب الشمالي مع بلورات ثلجية متجمدة وانزلاق فائق النعومة للكرات.',
-    ambientEffect: 'frost',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 4. Future Cyber Tech
-  {
-    id: 'future_tech',
-    nameAr: 'طاولة التكنولوجيا المستقبلية (Cyber Tech)',
-    nameEn: 'Future Cyber Tech 2077',
-    image: '/tables/table_future_tech.jpg',
-    price: 50000,
-    currency: 'coins',
-    cushionGlow: '#06b6d4',
-    feltColor: '#0f172a',
-    friction: 0.986,
-    bounceRestitution: 0.88,
-    descriptionAr: 'هيكل معدني مستقبلي بدوائر إلكترونية متوهجة بإضاءات النيون السيان والبنفسجي الرقمية فائقة الحساب.',
-    ambientEffect: 'cyber',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 5. Industrial Steampunk Steel
-  {
-    id: 'industrial_steel',
-    nameAr: 'طاولة الصلب الصناعي (Industrial Steel)',
-    nameEn: 'Industrial Steampunk Steel',
-    image: '/tables/table_industrial_steel.jpg',
-    price: 65000,
-    currency: 'coins',
-    cushionGlow: '#fb923c',
-    feltColor: '#334155',
-    friction: 0.984,
-    bounceRestitution: 0.87,
-    descriptionAr: 'صفائح صلب مقواة ومسامير برشام نحاسية مع تروس ستيمبانك وجيوب شبكية صناعية عتيدة.',
-    ambientEffect: 'industrial',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 6. Royal Imperial Purple & Gold
-  {
-    id: 'royal_purple',
-    nameAr: 'طاولة الذهب الملكي والأرجوان (Royal Imperial)',
-    nameEn: 'Royal Imperial Purple & Gold',
-    image: '/tables/table_royal_purple.jpg',
-    price: 80000,
-    currency: 'coins',
-    cushionGlow: '#fbbf24',
-    feltColor: '#581c87',
-    friction: 0.985,
-    bounceRestitution: 0.86,
-    descriptionAr: 'إطارات عاجية مذهبة بنقوش أرستقراطية وقماش مخملي أرجواني فاخر تليق بأباطرة وملوك لعبة البلياردو.',
-    ambientEffect: 'royal',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 7. Thunder & Lightning
-  {
-    id: 'lightning',
-    nameAr: 'طاولة البرق والرعد (Thunder & Lightning)',
-    nameEn: 'Thunderstorm Arcane Lightning',
-    image: '/tables/table_lightning.jpg',
-    price: 95000,
-    currency: 'coins',
-    cushionGlow: '#a855f7',
-    feltColor: '#1e1b4b',
-    friction: 0.986,
-    bounceRestitution: 0.89,
-    descriptionAr: 'صواعق كهربية زرقاء وبنفسجية مشحونة بطاقة الرعد تطلق شرارات ضوئية عند اصطدام الكرات.',
-    ambientEffect: 'lightning',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 8. Volcanic Lava
-  {
-    id: 'volcanic_lava',
-    nameAr: 'طاولة الحمم البركانية (Inferno Magma)',
-    nameEn: 'Inferno Volcanic Magma Table',
-    image: '/tables/table_volcanic_lava.jpg',
-    price: 110000,
-    currency: 'coins',
-    cushionGlow: '#ea580c',
-    feltColor: '#991b1b',
-    friction: 0.984,
-    bounceRestitution: 0.90, // Lively energetic cushion bounce
-    descriptionAr: 'حواف صخرية متصدعة تتدفق بحمم الصهارة المشتعلة مع ارتدادات حركية قوية لا ترحم.',
-    ambientEffect: 'magma',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  },
-  // 9. Cosmic Nebula
-  {
-    id: 'cosmic_nebula',
-    nameAr: 'طاولة السديم الكوني (Cosmic Nebula)',
-    nameEn: 'Cosmic Nebula & Galaxies',
-    image: '/tables/table_cosmic_nebula.jpg',
-    price: 130000,
-    currency: 'coins',
-    cushionGlow: '#60a5fa',
-    feltColor: '#030712',
-    friction: 0.987,
-    bounceRestitution: 0.89,
-    descriptionAr: 'مجرات حلزونية سابحة وثقوب سوداء تمتص الكرات في أرجاء الفضاء السحيق بإطار كروم ناصع.',
-    ambientEffect: 'cosmic',
-    geometry: DEFAULT_TABLE_GEOMETRY,
-  }
-];
+// THE 9 UNIQUE POOL TABLES (loaded from tablesConfig.json for easy physics tuning)
+export const ALL_TABLES: TableItem[] = tablesConfig.map((t) => ({
+  id: t.id,
+  tier: t.tier as TableTier,
+  tierLabelAr: t.tierLabelAr,
+  nameAr: t.nameAr,
+  nameEn: t.nameEn,
+  image: t.image,
+  price: t.price,
+  currency: t.currency as 'coins' | 'gems',
+  cushionGlow: t.cushionGlow,
+  feltColor: t.feltColor,
+  cushionRestitution: t.cushionRestitution,
+  clothFriction: t.clothFriction,
+  rollingResistance: t.rollingResistance,
+  spinGrip: t.spinGrip,
+  friction: t.clothFriction,
+  bounceRestitution: t.cushionRestitution,
+  descriptionAr: t.descriptionAr,
+  ambientEffect: t.ambientEffect as TableItem['ambientEffect'],
+  geometry: DEFAULT_TABLE_GEOMETRY,
+}));

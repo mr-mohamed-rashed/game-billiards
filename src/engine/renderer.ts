@@ -5,9 +5,13 @@ import {
   BallGroup,
   CUSHION,
   GameMode,
+  SNOOKER_COLOR_META,
+  SnookerTargetInfo,
   TABLE_HEIGHT,
   TABLE_WIDTH,
   TableGeometry,
+  getBreakLineX,
+  getSnookerSpots,
 } from "@/types/billiards";
 
 export function createBallGlossCanvas(): HTMLCanvasElement {
@@ -86,11 +90,13 @@ export interface RenderSceneParams {
   turn: "human" | "bot";
   isPractice: boolean;
   isShooting: boolean;
+  isBreakShot?: boolean;
   isBotAiming?: boolean;
   isBallInHand: boolean;
   ballInHandHoverPos: { x: number; y: number } | null;
   calledPocketId: number | null;
   humanGroup: BallGroup;
+  snookerTarget?: SnookerTargetInfo;
   aimAngle: number;
   power: number;
   spinX: number;
@@ -111,11 +117,13 @@ export function renderTableScene({
   turn,
   isPractice,
   isShooting,
+  isBreakShot = false,
   isBotAiming = false,
   isBallInHand,
   ballInHandHoverPos,
   calledPocketId,
   humanGroup,
+  snookerTarget,
   aimAngle,
   power,
   spinX,
@@ -163,20 +171,57 @@ export function renderTableScene({
   }
 
   const { bounds, pockets } = tableCfg.geometry;
+  const breakLineX = getBreakLineX(mode, tableCfg.geometry);
 
-  // Snooker Baulk Line & "D" Zone
+  // Snooker Baulk Line, "D" Zone & Color Spot Markers
   if (mode === "snooker") {
-    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    const { baulkX, centerY, spots } = getSnookerSpots(tableCfg.geometry);
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
     ctx.lineWidth = 2;
-    const baulkX = bounds.minX + (bounds.maxX - bounds.minX) * 0.22;
     ctx.beginPath();
     ctx.moveTo(baulkX, bounds.minY - BALL_RADIUS);
     ctx.lineTo(baulkX, bounds.maxY + BALL_RADIUS);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(baulkX, (bounds.minY + bounds.maxY) / 2, 60, -Math.PI / 2, Math.PI / 2, true);
+    ctx.arc(baulkX, centerY, 60, -Math.PI / 2, Math.PI / 2, true);
     ctx.stroke();
+
+    // Subtle spot markers on the felt for the 6 Snooker colors
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 1.2;
+    for (let si = 0; si < spots.length; si++) {
+      const sp = spots[si];
+      ctx.beginPath();
+      ctx.moveTo(sp.x - 4, sp.y);
+      ctx.lineTo(sp.x + 4, sp.y);
+      ctx.moveTo(sp.x, sp.y - 4);
+      ctx.lineTo(sp.x, sp.y + 4);
+      ctx.stroke();
+    }
+  }
+
+  // Highlight legal behind-the-line zone on Break Shot (or Snooker Ball-in-Hand)
+  if (
+    ((isBreakShot && !isShooting) || (isBallInHand && mode === "snooker")) &&
+    (turn === "human" || isPractice)
+  ) {
+    ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
+    ctx.fillRect(
+      bounds.minX - BALL_RADIUS,
+      bounds.minY - BALL_RADIUS,
+      breakLineX - (bounds.minX - BALL_RADIUS),
+      bounds.maxY - bounds.minY + BALL_RADIUS * 2
+    );
+    ctx.save();
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.72)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(breakLineX, bounds.minY - BALL_RADIUS);
+    ctx.lineTo(breakLineX, bounds.maxY + BALL_RADIUS);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Check if human player is on the 8-ball
@@ -403,8 +448,31 @@ export function renderTableScene({
     ctx.fillText("🧤", ballInHandHoverPos.x + 14, ballInHandHoverPos.y - 12);
   }
 
-  // 5. Aim Line Raycasting + Cue Ball Post-Collision Path + Bank Preview + Cue Stick
+  // 4b. Opening Break Shot Grab Halo around Cue Ball (lets player drag cue ball anywhere behind line)
   const cueBall = balls[0];
+  if (
+    isBreakShot &&
+    !isShooting &&
+    !isBallInHand &&
+    cueBall &&
+    !cueBall.isPotted &&
+    (turn === "human" || isPractice)
+  ) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.arc(cueBall.x, cueBall.y, BALL_RADIUS + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = "13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("↔️", cueBall.x, cueBall.y - BALL_RADIUS - 8);
+    ctx.restore();
+  }
+
+  // 5. Aim Line Raycasting + Cue Ball Post-Collision Path + Bank Preview + Cue Stick
   const canShowAim =
     !isShooting && !isBallInHand && cueBall && !cueBall.isPotted && (turn === "human" || isPractice || isBotAiming);
   if (canShowAim) {
@@ -469,6 +537,21 @@ export function renderTableScene({
         isAimedTargetLegal = false;
         warningText = "⚠️ فاول: هدفك الكرة 8!";
       }
+    } else if (hitBall && mode === "snooker" && snookerTarget && !isBotAiming) {
+      if (snookerTarget.phase === "red" && hitBall.type !== "red") {
+        isAimedTargetLegal = false;
+        warningText = "⚠️ فاول: يجب ضرب كرة حمراء!";
+      } else if (snookerTarget.phase === "color" && hitBall.type !== "color") {
+        isAimedTargetLegal = false;
+        warningText = "⚠️ فاول: اختر كرة ملونة!";
+      } else if (
+        snookerTarget.phase === "clearance" &&
+        (hitBall.type !== "color" || hitBall.value !== snookerTarget.expectedValue)
+      ) {
+        const expectedName = SNOOKER_COLOR_META[snookerTarget.expectedValue]?.nameAr || "";
+        isAimedTargetLegal = false;
+        warningText = `⚠️ فاول: المطلوب ${expectedName} (${snookerTarget.expectedValue})!`;
+      }
     }
 
     // Clamp ray to cushion if no ball hit before rail
@@ -514,7 +597,7 @@ export function renderTableScene({
       let rx = cushionHit.nx !== 0 ? -cosA : cosA;
       let ry = cushionHit.ny !== 0 ? -sinA : sinA;
       if (Math.abs(spinX) > 0.15) {
-        const engScale = -spinX * 0.48;
+        const engScale = -spinX * 0.48 * (tableCfg.spinGrip ?? 1.0);
         const tx = -cushionHit.ny;
         const ty = cushionHit.nx;
         rx += tx * engScale;

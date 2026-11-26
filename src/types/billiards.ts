@@ -2,6 +2,22 @@ export type GameMode = "8-ball" | "snooker";
 export type BallGroup = "unassigned" | "solids" | "stripes";
 export type ActiveModalType = "settings" | "shop" | "leaderboard" | "tournaments" | null;
 
+export type SnookerTargetInfo =
+  | { phase: "red" }
+  | { phase: "color" }
+  | { phase: "clearance"; expectedValue: number };
+
+export const SNOOKER_COLOR_ORDER = [2, 3, 4, 5, 6, 7] as const;
+
+export const SNOOKER_COLOR_META: Record<number, { color: string; nameAr: string }> = {
+  2: { color: "#facc15", nameAr: "الأصفر" },
+  3: { color: "#16a34a", nameAr: "الأخضر" },
+  4: { color: "#78350f", nameAr: "البني" },
+  5: { color: "#2563eb", nameAr: "الأزرق" },
+  6: { color: "#ec4899", nameAr: "الوردي" },
+  7: { color: "#09090b", nameAr: "الأسود" },
+};
+
 export interface Ball {
   id: number;
   x: number;
@@ -168,3 +184,51 @@ export const BALL_CONFIG_MAP: Record<number, { color: string; type: "solid" | "s
   14: { color: "#16a34a", type: "stripe", nameAr: "خضراء ألوان (14)" },
   15: { color: "#831843", type: "stripe", nameAr: "عنابية ألوان (15)" },
 };
+
+export function getBreakLineX(
+  mode: GameMode,
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+): number {
+  const { bounds } = geom;
+  const span = bounds.maxX - bounds.minX;
+  return mode === "snooker" ? bounds.minX + span * 0.22 : bounds.minX + span * 0.25;
+}
+
+export function getSnookerSpots(geom: TableGeometry = DEFAULT_TABLE_GEOMETRY) {
+  const { bounds } = geom;
+  const tableLeft = bounds.minX;
+  const tableRight = bounds.maxX;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  const centerX = (tableLeft + tableRight) / 2;
+  const baulkX = getBreakLineX("snooker", geom);
+  const apexX = tableLeft + (tableRight - tableLeft) * 0.75;
+  const pinkX = apexX - BALL_RADIUS * 2.18;
+  const blackX = tableRight - 55;
+
+  return {
+    baulkX,
+    apexX,
+    centerY,
+    spots: [
+      { val: 2, color: "#facc15", x: baulkX, y: centerY + 60 },
+      { val: 3, color: "#16a34a", x: baulkX, y: centerY - 60 },
+      { val: 4, color: "#78350f", x: baulkX, y: centerY },
+      { val: 5, color: "#2563eb", x: centerX, y: centerY },
+      { val: 6, color: "#ec4899", x: pinkX, y: centerY },
+      { val: 7, color: "#09090b", x: blackX, y: centerY },
+    ],
+  };
+}
+
+export function getSnookerTargetInfo(
+  balls: Ball[],
+  onColorAfterRed: boolean
+): SnookerTargetInfo {
+  if (onColorAfterRed) return { phase: "color" };
+  const hasReds = balls.some((b) => !b.isPotted && b.type === "red");
+  if (hasReds) return { phase: "red" };
+  const remainingColors = balls.filter((b) => !b.isPotted && b.type === "color");
+  if (remainingColors.length === 0) return { phase: "clearance", expectedValue: 7 };
+  const expectedValue = Math.min(...remainingColors.map((b) => b.value || 7));
+  return { phase: "clearance", expectedValue };
+}
