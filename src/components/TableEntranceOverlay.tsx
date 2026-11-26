@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { TableItem } from "@/config/shopData";
 import { GameMode } from "@/types/billiards";
 
@@ -23,34 +23,93 @@ export function TableEntranceOverlay({
   prize,
   onFinish,
 }: TableEntranceOverlayProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const cameraImgRef = useRef<HTMLImageElement | null>(null);
+  const leftBeamRef = useRef<HTMLDivElement | null>(null);
+  const rightBeamRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    const timer = setTimeout(onFinish, 2650);
-    return () => clearTimeout(timer);
+    const DURATION_MS = 2400;
+    const FADE_START_MS = 2000;
+    const startTime = performance.now();
+    let rafId = 0;
+
+    // Set initial camera frame immediately before first paint
+    const applyCameraFrame = (elapsed: number) => {
+      const raw = Math.min(1, Math.max(0, elapsed / DURATION_MS));
+      // Smooth sine ease-in-out for continuous Steadicam cameraman motion
+      const ease = 0.5 - 0.5 * Math.cos(raw * Math.PI);
+
+      // Smooth circular arc (never reverses direction) + gentle slow-mo zoom
+      const arcAngle = -0.45 + ease * 0.95; // radians
+      const tx = -Math.sin(arcAngle) * 2.4;
+      const ty = (1 - Math.cos(arcAngle)) * 1.4 - 0.4;
+      const scale = 1.15 + raw * 0.09;
+      const rotDeg = -1.4 + ease * 2.8;
+
+      if (cameraImgRef.current) {
+        cameraImgRef.current.style.transform = `translate3d(${tx.toFixed(3)}%, ${ty.toFixed(3)}%, 0) scale(${scale.toFixed(4)}) rotate(${rotDeg.toFixed(3)}deg)`;
+      }
+
+      if (leftBeamRef.current) {
+        const leftRot = -24 + ease * 10;
+        leftBeamRef.current.style.transform = `rotate(${leftRot.toFixed(2)}deg)`;
+      }
+      if (rightBeamRef.current) {
+        const rightRot = 24 - ease * 10;
+        rightBeamRef.current.style.transform = `rotate(${rightRot.toFixed(2)}deg)`;
+      }
+
+      if (containerRef.current) {
+        if (elapsed >= FADE_START_MS) {
+          const fadeT = Math.min(1, (elapsed - FADE_START_MS) / (DURATION_MS - FADE_START_MS));
+          containerRef.current.style.opacity = `${(1 - fadeT).toFixed(3)}`;
+        } else {
+          containerRef.current.style.opacity = "1";
+        }
+      }
+    };
+
+    applyCameraFrame(0);
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      applyCameraFrame(elapsed);
+      if (elapsed >= DURATION_MS) {
+        onFinish();
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [onFinish]);
 
   const showcaseImage = table.sideImage || table.image;
 
   return (
     <div
+      ref={containerRef}
       onClick={onFinish}
       dir="rtl"
-      className="absolute inset-0 z-[75] bg-[#02050d] overflow-hidden flex flex-col justify-between cursor-pointer animate-arena-entrance select-none"
+      className="absolute inset-0 z-[75] bg-[#02050d] overflow-hidden flex flex-col justify-between cursor-pointer select-none will-change-[opacity]"
     >
-      {/* Slow-motion 3D Side Table Camera Pan */}
+      {/* Continuous Steadicam Circular Slow-Mo Zoom on 3D Table */}
       {showcaseImage && (
         <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
           <img
+            ref={cameraImgRef}
             src={showcaseImage}
             alt={table.nameAr}
-            className="w-full h-full object-cover animate-arena-cam"
+            className="w-full h-full object-cover will-change-transform"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-black/75" />
         </div>
       )}
 
-      {/* Overhead Arena Truss & Volumetric Spotlights Shining Down on the Table */}
+      {/* Overhead Arena Truss & Smooth Volumetric Spotlights */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {/* Top Ceiling Light Truss Bar */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[78%] h-3 bg-gradient-to-b from-slate-700/80 to-transparent flex items-center justify-around">
           <span className="w-4 h-2 rounded-full bg-white shadow-[0_0_22px_8px_rgba(255,255,255,0.85)]" />
           <span
@@ -60,31 +119,30 @@ export function TableEntranceOverlay({
           <span className="w-4 h-2 rounded-full bg-white shadow-[0_0_22px_8px_rgba(255,255,255,0.85)]" />
         </div>
 
-        {/* Left Overhead Spotlight Cone */}
         <div
-          className="absolute -top-8 left-[16%] w-44 sm:w-72 h-[115%] origin-top animate-spotlight-left"
+          ref={leftBeamRef}
+          className="absolute -top-8 left-[16%] w-44 sm:w-72 h-[115%] origin-top opacity-70 will-change-transform"
           style={{
-            background: `linear-gradient(to bottom, rgba(255,255,255,0.42), ${table.cushionGlow}28 45%, transparent 88%)`,
+            background: `linear-gradient(to bottom, rgba(255,255,255,0.38), ${table.cushionGlow}24 45%, transparent 88%)`,
             clipPath: "polygon(38% 0%, 62% 0%, 100% 100%, 0% 100%)",
             filter: "blur(6px)",
           }}
         />
 
-        {/* Center Overhead Championship Light */}
         <div
-          className="absolute -top-6 left-1/2 -translate-x-1/2 w-64 sm:w-96 h-[110%] origin-top opacity-70"
+          className="absolute -top-6 left-1/2 -translate-x-1/2 w-64 sm:w-96 h-[110%] origin-top opacity-65"
           style={{
-            background: `linear-gradient(to bottom, rgba(255,255,255,0.34), ${table.cushionGlow}22 48%, transparent 85%)`,
+            background: `linear-gradient(to bottom, rgba(255,255,255,0.3), ${table.cushionGlow}20 48%, transparent 85%)`,
             clipPath: "polygon(34% 0%, 66% 0%, 100% 100%, 0% 100%)",
             filter: "blur(10px)",
           }}
         />
 
-        {/* Right Overhead Spotlight Cone */}
         <div
-          className="absolute -top-8 right-[16%] w-44 sm:w-72 h-[115%] origin-top animate-spotlight-right"
+          ref={rightBeamRef}
+          className="absolute -top-8 right-[16%] w-44 sm:w-72 h-[115%] origin-top opacity-70 will-change-transform"
           style={{
-            background: `linear-gradient(to bottom, rgba(255,255,255,0.42), ${table.cushionGlow}28 45%, transparent 88%)`,
+            background: `linear-gradient(to bottom, rgba(255,255,255,0.38), ${table.cushionGlow}24 45%, transparent 88%)`,
             clipPath: "polygon(38% 0%, 62% 0%, 100% 100%, 0% 100%)",
             filter: "blur(6px)",
           }}
