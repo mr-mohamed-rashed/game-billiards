@@ -35,6 +35,7 @@ import { createBallGlossCanvas, renderTableScene } from "@/engine/renderer";
 import { IntroVideo } from "@/components/IntroVideo";
 import { ModeSelectTriangles } from "@/components/ModeSelectTriangles";
 import { Lobby } from "@/components/Lobby";
+import { MatchedOpponentInfo, MatchmakingOverlay } from "@/components/MatchmakingOverlay";
 import { ShopModal } from "@/components/ShopModal";
 import { GameModals } from "@/components/GameModals";
 import { TableHUD } from "@/components/TableHUD";
@@ -62,10 +63,16 @@ function CueMasterApp() {
   const initialStake = parseInt(searchParams.get("stake") || "100");
   const initialPrize = parseInt(searchParams.get("prize") || "190");
   const initialMode = (searchParams.get("mode") as GameMode) || "8-ball";
-  const opponentName = searchParams.get("opponentName") || "أحمد_البرنس";
-  const opponentAvatar =
+  const initialOpponentName = searchParams.get("opponentName") || "أحمد_البرنس";
+  const initialOpponentAvatar =
     searchParams.get("opponentAvatar") || "https://api.dicebear.com/7.x/bottts/svg?seed=AhmedEG";
-  const opponentFlag = searchParams.get("opponentFlag") || "🇪🇬";
+  const initialOpponentFlag = searchParams.get("opponentFlag") || "🇪🇬";
+
+  // Active Matchmaking & Opponent State
+  const [matchmakingPending, setMatchmakingPending] = useState<{ mode: GameMode; stake: number } | null>(null);
+  const [opponentName, setOpponentName] = useState(initialOpponentName);
+  const [opponentAvatar, setOpponentAvatar] = useState(initialOpponentAvatar);
+  const [opponentFlag, setOpponentFlag] = useState(initialOpponentFlag);
 
   // Navigation & Modals
   const [currentView, setCurrentView] = useState<"intro" | "mode_select" | "menu" | "table">("intro");
@@ -931,8 +938,27 @@ function CueMasterApp() {
     }
   }, [currentView, turn, isShooting, gameOver, isPractice, isBallInHand, botGroup]);
 
-  const startMatch = (targetMode: GameMode, practice = false, tableStake = 100) => {
+  const beginPlayWithMatchmaking = (targetMode: GameMode, tableStake = 100) => {
     unlockAudio();
+    if (tableStake > 0 && coinsRef.current < tableStake) {
+      alert(`❌ رصيدك الحالي (${coinsRef.current.toLocaleString()} 🪙) غير كافٍ لدخول طاولة برهان ${tableStake.toLocaleString()} 🪙!`);
+      return;
+    }
+    setMatchmakingPending({ mode: targetMode, stake: tableStake });
+  };
+
+  const startMatch = (
+    targetMode: GameMode,
+    practice = false,
+    tableStake = 100,
+    explicitOpponent?: { name: string; avatar: string; flag: string }
+  ) => {
+    unlockAudio();
+    if (explicitOpponent) {
+      setOpponentName(explicitOpponent.name);
+      setOpponentAvatar(explicitOpponent.avatar);
+      setOpponentFlag(explicitOpponent.flag);
+    }
     if (!practice && tableStake > 0) {
       if (coinsRef.current < tableStake) {
         alert(`❌ رصيدك الحالي (${coinsRef.current.toLocaleString()} 🪙) غير كافٍ لدخول طاولة برهان ${tableStake.toLocaleString()} 🪙!`);
@@ -1026,6 +1052,7 @@ function CueMasterApp() {
           onChangeMode={() => setCurrentView("mode_select")}
           onAddCoins={(amt) => saveCoins(coins + amt)}
           onAddGems={(amt) => saveGems(gems + amt)}
+          onPlayMatchmaking={beginPlayWithMatchmaking}
           onStartMatch={startMatch}
           onOpenModal={(modal, tab) => {
             if (tab) setShopTab(tab);
@@ -1204,6 +1231,29 @@ function CueMasterApp() {
             </main>
           </div>
         </div>
+      )}
+
+      {matchmakingPending && (
+        <MatchmakingOverlay
+          username={username}
+          avatar={avatar}
+          mode={matchmakingPending.mode}
+          stake={matchmakingPending.stake}
+          prize={Math.round(matchmakingPending.stake * 1.9)}
+          soundEnabled={soundEnabled}
+          onCancel={() => setMatchmakingPending(null)}
+          onMatched={(bot: MatchedOpponentInfo) => {
+            const pending = matchmakingPending;
+            setMatchmakingPending(null);
+            if (pending) {
+              startMatch(pending.mode, false, pending.stake, {
+                name: bot.name,
+                avatar: bot.avatar,
+                flag: bot.flag,
+              });
+            }
+          }}
+        />
       )}
 
       {(activeModal || gameOver) && (
