@@ -33,6 +33,7 @@ export function GameModals({
   aimAssistLong,
   currentTable,
   activeCue,
+  mode,
   isPractice,
   stake,
   onToggleSound,
@@ -122,48 +123,13 @@ export function GameModals({
                   <button
                     onClick={() => {
                       onCloseModal();
-                      onStartMatch("8-ball", false, t.entry);
+                      onStartMatch(mode, false, t.entry);
                     }}
                     className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer shadow"
                   >
                     دخول {t.entry} 🪙
                   </button>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeModal === "stake_select" && (
-        <div className="w-full h-full flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
-          <div className="bg-[#0b121e] border border-amber-500/40 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-black text-amber-300">اختر طاولة اللعب والرهان</h3>
-              <button onClick={onCloseModal} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
-            </div>
-
-            <div className="space-y-2.5">
-              {[
-                { name: "طاولة المبتدئين (الصالون)", stake: 100, prize: 190 },
-                { name: "طاولة الهواة (النادي)", stake: 500, prize: 950 },
-                { name: "طاولة المحترفين (VIP)", stake: 2500, prize: 4750 },
-                { name: "طاولة الملوك (High Roller)", stake: 10000, prize: 19000 },
-              ].map((st, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    onCloseModal();
-                    onStartMatch("8-ball", false, st.stake);
-                  }}
-                  className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-400/50 transition-all cursor-pointer"
-                >
-                  <div className="text-right">
-                    <div className="text-xs font-black text-white">{st.name}</div>
-                    <div className="text-[10px] text-amber-400">الجائزة: {st.prize.toLocaleString()} 🪙</div>
-                  </div>
-                  <span className="text-xs font-black text-emerald-400">{st.stake.toLocaleString()} 🪙</span>
-                </button>
               ))}
             </div>
           </div>

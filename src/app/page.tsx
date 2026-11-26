@@ -10,7 +10,6 @@ import {
   BallGroup,
   CinematicCamState,
   GameMode,
-  POCKETS,
   TABLE_HEIGHT,
   TABLE_WIDTH,
 } from "@/types/billiards";
@@ -33,6 +32,8 @@ import {
 } from "@/engine/physics";
 import { resolveShotOutcome } from "@/engine/rules";
 import { createBallGlossCanvas, renderTableScene } from "@/engine/renderer";
+import { IntroVideo } from "@/components/IntroVideo";
+import { ModeSelectTriangles } from "@/components/ModeSelectTriangles";
 import { Lobby } from "@/components/Lobby";
 import { ShopModal } from "@/components/ShopModal";
 import { GameModals } from "@/components/GameModals";
@@ -67,7 +68,7 @@ function CueMasterApp() {
   const opponentFlag = searchParams.get("opponentFlag") || "🇪🇬";
 
   // Navigation & Modals
-  const [currentView, setCurrentView] = useState<"menu" | "table">("menu");
+  const [currentView, setCurrentView] = useState<"intro" | "mode_select" | "menu" | "table">("intro");
   const [activeModal, setActiveModal] = useState<ActiveModalType>(null);
 
   // Shop & Inventory
@@ -999,12 +1000,26 @@ function CueMasterApp() {
       className="relative w-screen h-dvh bg-[#020b14] text-slate-100 flex flex-col font-sans select-none overflow-hidden"
       dir="rtl"
     >
-      {currentView === "menu" ? (
+      {currentView === "intro" ? (
+        <IntroVideo onFinish={() => setCurrentView("mode_select")} />
+      ) : currentView === "mode_select" ? (
+        <ModeSelectTriangles
+          onSelectMode={(pickedMode) => {
+            unlockAudio();
+            if (soundEnabledRef.current) playBallClack(5);
+            modeRef.current = pickedMode;
+            setMode(pickedMode);
+            setCurrentView("menu");
+          }}
+        />
+      ) : currentView === "menu" ? (
         <Lobby
           username={username}
           avatar={avatar}
           coins={coins}
           gems={gems}
+          selectedMode={mode}
+          onChangeMode={() => setCurrentView("mode_select")}
           onAddCoins={(amt) => saveCoins(coins + amt)}
           onAddGems={(amt) => saveGems(gems + amt)}
           onStartMatch={startMatch}

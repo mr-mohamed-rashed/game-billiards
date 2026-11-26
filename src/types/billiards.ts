@@ -1,6 +1,6 @@
 export type GameMode = "8-ball" | "snooker";
 export type BallGroup = "unassigned" | "solids" | "stripes";
-export type ActiveModalType = "settings" | "shop" | "leaderboard" | "tournaments" | "stake_select" | null;
+export type ActiveModalType = "settings" | "shop" | "leaderboard" | "tournaments" | null;
 
 export interface Ball {
   id: number;

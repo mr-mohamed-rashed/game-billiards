@@ -7,6 +7,8 @@ interface LobbyProps {
   avatar: string;
   coins: number;
   gems: number;
+  selectedMode: GameMode;
+  onChangeMode: () => void;
   onAddCoins: (amount: number) => void;
   onAddGems: (amount: number) => void;
   onStartMatch: (mode: GameMode, practice: boolean, stake: number) => void;
@@ -18,11 +20,15 @@ export function Lobby({
   avatar,
   coins,
   gems,
+  selectedMode,
+  onChangeMode,
   onAddCoins,
   onAddGems,
   onStartMatch,
   onOpenModal,
 }: LobbyProps) {
+  const isSnooker = selectedMode === "snooker";
+
   return (
     <div
       className="relative w-full h-full flex flex-col justify-between bg-cover bg-center overflow-y-auto"
@@ -59,7 +65,16 @@ export function Lobby({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={onChangeMode}
+            className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 rounded-2xl border border-amber-400/50 text-amber-300 font-black text-[11px] sm:text-xs cursor-pointer shadow active:scale-95"
+            title="تغيير نوع اللعبة (بلياردو / سنوكر)"
+          >
+            <span>{isSnooker ? "🔴 سنوكر" : "🎱 بلياردو"}</span>
+            <span className="text-slate-400">🔄</span>
+          </button>
+
           <div className="flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-2xl border border-amber-500/40">
             <span className="text-base">🪙</span>
             <span className="font-black text-amber-400 text-xs md:text-sm">{coins.toLocaleString()}</span>
@@ -88,20 +103,32 @@ export function Lobby({
 
       {/* Main Lobby Hub Content */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-4 max-w-4xl mx-auto w-full space-y-4">
-        {/* HERO CARD: DOWNTOWN LONDON PUB */}
-        <div className="relative w-full rounded-3xl overflow-hidden border-2 border-amber-400/80 shadow-[0_10px_35px_rgba(0,0,0,0.85)] bg-gradient-to-b from-blue-950 via-[#071c36] to-slate-950 p-5 md:p-6 text-center">
+        {/* HERO CARD: Active Selected Mode (8-Ball or Snooker) */}
+        <div
+          className={`relative w-full rounded-3xl overflow-hidden border-2 shadow-[0_10px_35px_rgba(0,0,0,0.85)] p-5 md:p-6 text-center ${
+            isSnooker
+              ? "border-rose-400/80 bg-gradient-to-b from-rose-950 via-[#2a0714] to-slate-950"
+              : "border-amber-400/80 bg-gradient-to-b from-blue-950 via-[#071c36] to-slate-950"
+          }`}
+        >
           <div className="absolute top-2 left-3 text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full shadow">
-            طاولة لندن الرسمية 🇬🇧
+            {isSnooker ? "بطولة السنوكر الإنجليزي 🔴" : "طاولة لندن الرسمية 🇬🇧"}
           </div>
 
           <div className="flex flex-col items-center justify-center my-1">
-            <div className="text-[11px] font-extrabold uppercase tracking-widest text-cyan-300 drop-shadow">DOWNTOWN</div>
+            <div className="text-[11px] font-extrabold uppercase tracking-widest text-cyan-300 drop-shadow">
+              {isSnooker ? "CHAMPIONSHIP SNOOKER" : "DOWNTOWN"}
+            </div>
             <div className="flex items-center gap-2 text-3xl md:text-5xl font-black italic tracking-tight text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)]">
-              <span>LONDON</span>
-              <span className="w-8 h-8 md:w-11 md:h-11 rounded-full bg-slate-950 border-2 border-white flex items-center justify-center text-sm md:text-lg font-black not-italic text-white shadow-lg">
-                8
+              <span>{isSnooker ? "MASTERS" : "LONDON"}</span>
+              <span
+                className={`w-8 h-8 md:w-11 md:h-11 rounded-full border-2 border-white flex items-center justify-center text-sm md:text-lg font-black not-italic text-white shadow-lg ${
+                  isSnooker ? "bg-red-600" : "bg-slate-950"
+                }`}
+              >
+                {isSnooker ? "15" : "8"}
               </span>
-              <span>PUB</span>
+              <span>{isSnooker ? "CUP" : "PUB"}</span>
             </div>
           </div>
 
@@ -125,7 +152,7 @@ export function Lobby({
           </div>
 
           <button
-            onClick={() => onStartMatch("8-ball", false, 100)}
+            onClick={() => onStartMatch(selectedMode, false, 100)}
             className="w-full max-w-xs mx-auto py-3 md:py-4 px-8 rounded-2xl font-black text-lg md:text-xl text-white shadow-[0_8px_25px_rgba(34,197,94,0.5)] border-2 border-emerald-300 bg-gradient-to-b from-emerald-400 via-emerald-600 to-emerald-800 hover:from-emerald-300 hover:to-emerald-700 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
           >
             <span>PLAY</span>
@@ -144,7 +171,7 @@ export function Lobby({
           </button>
 
           <button
-            onClick={() => onStartMatch("8-ball", true, 0)}
+            onClick={() => onStartMatch(selectedMode, true, 0)}
             className="relative flex flex-col items-center justify-center py-3.5 px-2 rounded-2xl font-black text-xs md:text-sm text-slate-950 shadow-[0_6px_20px_rgba(234,179,8,0.35)] border border-amber-300/60 bg-gradient-to-b from-amber-300 via-amber-400 to-amber-600 hover:from-amber-200 hover:to-amber-500 active:scale-95 transition-all cursor-pointer"
           >
             <span className="text-xl md:text-2xl mb-1">🎯</span>
@@ -152,11 +179,11 @@ export function Lobby({
           </button>
 
           <button
-            onClick={() => onOpenModal("stake_select")}
+            onClick={() => onOpenModal("shop", "tables")}
             className="relative flex flex-col items-center justify-center py-3.5 px-2 rounded-2xl font-black text-xs md:text-sm text-white shadow-[0_6px_20px_rgba(37,99,235,0.35)] border border-blue-400/50 bg-gradient-to-b from-blue-500 via-blue-600 to-blue-800 hover:from-blue-400 hover:to-blue-700 active:scale-95 transition-all cursor-pointer"
           >
-            <span className="text-xl md:text-2xl mb-1">👥</span>
-            <span>اختيار الطاولة</span>
+            <span className="text-xl md:text-2xl mb-1">🎨</span>
+            <span>شكل الطاولة</span>
           </button>
         </div>
 
@@ -190,7 +217,7 @@ export function Lobby({
                   </div>
                 </div>
                 <button
-                  onClick={() => onStartMatch("8-ball", false, friend.stake)}
+                  onClick={() => onStartMatch(selectedMode, false, friend.stake)}
                   className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-white font-black text-xs cursor-pointer shadow active:scale-95"
                 >
                   العب
@@ -212,7 +239,7 @@ export function Lobby({
         </button>
 
         <button
-          onClick={() => onStartMatch("8-ball", true, 0)}
+          onClick={() => onStartMatch(selectedMode, true, 0)}
           className="flex flex-col items-center gap-0.5 text-slate-400 hover:text-amber-300 font-bold cursor-pointer"
         >
           <span className="text-xl">🎯</span>
