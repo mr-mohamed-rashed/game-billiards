@@ -24,7 +24,7 @@ export function TableEntranceOverlay({
   onFinish,
 }: TableEntranceOverlayProps) {
   useEffect(() => {
-    const timer = setTimeout(onFinish, 2250);
+    const timer = setTimeout(onFinish, 2650);
     return () => clearTimeout(timer);
   }, [onFinish]);
 

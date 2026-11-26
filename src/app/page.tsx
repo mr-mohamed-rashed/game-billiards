@@ -12,6 +12,7 @@ import {
   TABLE_HEIGHT,
   TABLE_WIDTH,
   getBreakLineX,
+  getMatchDifficulty,
   getModeBallRadius,
   getSnookerTargetInfo,
 } from "@/types/billiards";
@@ -180,6 +181,7 @@ function CueMasterApp() {
   const selectedTableRef = useRef("classic");
   const modeRef = useRef<GameMode>(initialMode);
   const isPracticeRef = useRef(false);
+  const stakeRef = useRef(initialStake);
   const prizeRef = useRef(initialPrize);
   const coinsRef = useRef(85000);
   const cinematicCamRef = useRef<CinematicCamState | null>(null);
@@ -197,6 +199,7 @@ function CueMasterApp() {
   useEffect(() => { selectedTableRef.current = selectedTable; }, [selectedTable]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { isPracticeRef.current = isPractice; }, [isPractice]);
+  useEffect(() => { stakeRef.current = stake; }, [stake]);
   useEffect(() => { prizeRef.current = prize; }, [prize]);
   useEffect(() => { coinsRef.current = coins; }, [coins]);
   useEffect(() => { calledPocketIdRef.current = calledPocketId; }, [calledPocketId]);
@@ -504,6 +507,7 @@ function CueMasterApp() {
 
       const tableCfg = ALL_TABLES.find((t) => t.id === selectedTableRef.current) || ALL_TABLES[0];
       const activeCueObj = ALL_CUES.find((c) => c.id === selectedCueRef.current) || ALL_CUES[0];
+      const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current);
 
       renderTableScene({
         ctx,
@@ -526,6 +530,9 @@ function CueMasterApp() {
         spinX: spinXRef.current,
         spinY: spinYRef.current,
         aimAssistLong: aimAssistLongRef.current,
+        aimScale: matchDiff.aimScale,
+        maxAimDistCap: matchDiff.maxAimDistCap,
+        targetLineScale: matchDiff.targetLineScale,
         glossCanvas: glossCanvasRef.current,
         tableImageCache: tableImageCacheRef.current,
         cueImageCache: cueImageCacheRef.current,
@@ -605,6 +612,11 @@ function CueMasterApp() {
         cueScratchedInShotRef.current = false;
         firstBallHitInShotRef.current = null;
 
+        const shotCalledPocket = activeShotCalledPocketRef.current;
+        activeShotCalledPocketRef.current = null;
+        calledPocketIdRef.current = null;
+        setCalledPocketId(null);
+
         resolveShotOutcome({
           mode: modeRef.current,
           isPractice: isPracticeRef.current,
@@ -615,7 +627,7 @@ function CueMasterApp() {
           cueScratched,
           firstHit,
           activeShooter: turnRef.current,
-          targetPocketForThisShot: activeShotCalledPocketRef.current,
+          targetPocketForThisShot: shotCalledPocket,
           humanGroup: humanGroupRef.current,
           botGroup: botGroupRef.current,
           snookerOnColorAfterRed: snookerOnColorAfterRedRef.current,
@@ -903,8 +915,17 @@ function CueMasterApp() {
     if (isShootingRef.current || isBallInHandRef.current) return;
     if (turnRef.current !== "human" && !isPracticeRef.current) return;
 
-    if (isHumanOnEightBall() && calledPocketIdRef.current === null) {
-      setTurnMessage("🎯 اختر الجيب الهدف للكرة السوداء 8 أولاً بالضغط عليه!");
+    const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current);
+    const mustCallPocket =
+      isHumanOnEightBall() ||
+      (modeRef.current === "8-ball" && !isBreakShotRef.current && matchDiff.requireCalledPocket);
+
+    if (mustCallPocket && calledPocketIdRef.current === null) {
+      setTurnMessage(
+        isHumanOnEightBall()
+          ? "🎯 اختر الجيب الهدف للكرة السوداء 8 أولاً بالضغط عليه!"
+          : `🎯 في مستوى (${matchDiff.labelAr}) يجب تحديد الجيب بالضغط عليه أولاً!`
+      );
       applyPowerVisual(0);
       setPower(0);
       return;
@@ -955,7 +976,15 @@ function CueMasterApp() {
         if (cueBall.isPotted) placeCueBallSafely(ballsRef.current, activeGeom, baulkMaxX);
 
         const snookerTarget = getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current);
-        const plan = computeBotShot(ballsRef.current, botGroupRef.current, modeRef.current, activeGeom, snookerTarget);
+        const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current);
+        const plan = computeBotShot(
+          ballsRef.current,
+          botGroupRef.current,
+          modeRef.current,
+          activeGeom,
+          snookerTarget,
+          matchDiff.botAimError
+        );
         if (!plan) return;
 
         calledPocketIdRef.current = plan.pocketId;
@@ -1064,6 +1093,7 @@ function CueMasterApp() {
     const matchPrize = practice ? 0 : Math.round(tableStake * 1.9);
     modeRef.current = targetMode;
     isPracticeRef.current = practice;
+    stakeRef.current = tableStake;
     prizeRef.current = matchPrize;
     setMode(targetMode);
     setIsPractice(practice);

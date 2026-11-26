@@ -788,7 +788,8 @@ export function computeBotShot(
   botGroup: BallGroup,
   mode: GameMode,
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
-  snookerTarget?: SnookerTargetInfo
+  snookerTarget?: SnookerTargetInfo,
+  botAimError: number = 0.048
 ): BotShotPlan | null {
   const cueBall = balls[0];
   if (!cueBall || cueBall.isPotted) return null;
@@ -859,7 +860,7 @@ export function computeBotShot(
 
       if (score > bestScore) {
         bestScore = score;
-        const variance = (Math.random() - 0.5) * 0.048;
+        const variance = (Math.random() - 0.5) * botAimError;
         const speed = Math.min(34, Math.max(18, 17 + (distCG + distBP) * 0.018 + (1 - cutDot) * 6));
         bestPlan = {
           angle: Math.atan2(toGy, toGx) + variance,

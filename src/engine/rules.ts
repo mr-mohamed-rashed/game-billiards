@@ -172,10 +172,18 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       return;
     }
 
-    // 3. Open Pockets for regular balls
+    // 3. Open Pockets / Called Pocket check for regular balls
     let updatedHumanGroup = humanGroup;
     let updatedBotGroup = botGroup;
-    const legalPottedBalls = pottedList.map((entry) => entry.ball);
+    const validPocketEntries =
+      targetPocketForThisShot !== null
+        ? pottedList.filter((entry) => entry.pocketId === targetPocketForThisShot)
+        : pottedList;
+    const legalPottedBalls = validPocketEntries.map((entry) => entry.ball);
+    const pottedInWrongPocket =
+      targetPocketForThisShot !== null &&
+      pottedList.length > 0 &&
+      validPocketEntries.length === 0;
 
     if (humanGroup === "unassigned" && legalPottedBalls.length > 0) {
       const firstLegal = legalPottedBalls.find((b) => b.type === "solid" || b.type === "stripe");
@@ -243,7 +251,13 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     } else if (!isPractice) {
       const nextT = activeShooter === "human" ? "bot" : "human";
       onTurnChange(nextT);
-      if (nextT === "human") {
+      if (pottedInWrongPocket) {
+        onMessage(
+          nextT === "human"
+            ? "🎯 الخصم أخطأ الجيب المحدد! دورك الآن."
+            : "🎯 الكرة سقطت في جيب غير الجيب المحدد! دور الخصم."
+        );
+      } else if (nextT === "human") {
         onMessage(
           remainingHumanAfter.length === 0 && updatedHumanGroup !== "unassigned"
             ? "🏆 دورك على الكرة 8! اضغط على الجيب الهدف أولاً."
@@ -252,6 +266,8 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       } else {
         onMessage("دور الخصم الآن...");
       }
+    } else if (pottedInWrongPocket) {
+      onMessage("🎯 الكرة سقطت في جيب غير الجيب المحدد!");
     }
   } else {
     // Snooker mode

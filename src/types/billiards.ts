@@ -194,6 +194,71 @@ export const DEFAULT_TABLE_GEOMETRY: TableGeometry = buildTableGeometryFromWalls
   bottom: 390,
 });
 
+export interface MatchDifficulty {
+  id: "rookie" | "pro" | "masters" | "legend";
+  labelAr: string;
+  aimLabelAr: string;
+  badgeColor: string;
+  aimScale: number;
+  maxAimDistCap: number;
+  targetLineScale: number;
+  botAimError: number;
+  requireCalledPocket: boolean;
+}
+
+export function getMatchDifficulty(stake: number, isPractice: boolean): MatchDifficulty {
+  if (isPractice || stake <= 100) {
+    return {
+      id: "rookie",
+      labelAr: isPractice ? "تدريب حر" : "مبتدئ",
+      aimLabelAr: "سهم كامل (100%)",
+      badgeColor: "#22c55e",
+      aimScale: 1.0,
+      maxAimDistCap: 800,
+      targetLineScale: 1.0,
+      botAimError: 0.055,
+      requireCalledPocket: false,
+    };
+  }
+  if (stake <= 500) {
+    return {
+      id: "pro",
+      labelAr: "محترفين",
+      aimLabelAr: "سهم متوسط (62%)",
+      badgeColor: "#38bdf8",
+      aimScale: 0.62,
+      maxAimDistCap: 380,
+      targetLineScale: 0.65,
+      botAimError: 0.032,
+      requireCalledPocket: false,
+    };
+  }
+  if (stake <= 2500) {
+    return {
+      id: "masters",
+      labelAr: "أساتذة",
+      aimLabelAr: "سهم قصير (38%) + تحديد جيب",
+      badgeColor: "#f59e0b",
+      aimScale: 0.38,
+      maxAimDistCap: 230,
+      targetLineScale: 0.38,
+      botAimError: 0.018,
+      requireCalledPocket: true,
+    };
+  }
+  return {
+    id: "legend",
+    labelAr: "أساطير 🔥",
+    aimLabelAr: "سهم قصير جداً (22%) + تحديد جيب",
+    badgeColor: "#f43f5e",
+    aimScale: 0.22,
+    maxAimDistCap: 135,
+    targetLineScale: 0.22,
+    botAimError: 0.008,
+    requireCalledPocket: true,
+  };
+}
+
 export const POCKETS: Pocket[] = DEFAULT_TABLE_GEOMETRY.pockets;
 export const POCKET_JAWS: { x: number; y: number; r: number }[] = DEFAULT_TABLE_GEOMETRY.jaws;
 

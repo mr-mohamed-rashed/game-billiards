@@ -1,6 +1,14 @@
 "use client";
 
-import { ActiveModalType, GameMode } from "@/types/billiards";
+import { useState } from "react";
+import { ActiveModalType, GameMode, getMatchDifficulty } from "@/types/billiards";
+
+const STAKE_LEVELS = [
+  { stake: 100, icon: "🌱" },
+  { stake: 500, icon: "⚡" },
+  { stake: 2500, icon: "👑" },
+  { stake: 10000, icon: "🔥" },
+];
 
 interface LobbyProps {
   username: string;
@@ -35,6 +43,9 @@ export function Lobby({
   onOpenModal,
 }: LobbyProps) {
   const isSnooker = selectedMode === "snooker";
+  const [selectedStake, setSelectedStake] = useState(100);
+  const diff = getMatchDifficulty(selectedStake, false);
+  const selectedPrize = Math.round(selectedStake * 1.9);
 
   return (
     <div
@@ -151,13 +162,42 @@ export function Lobby({
             </div>
           </div>
 
-          <div className="text-sm md:text-base font-black text-amber-300 mb-3 flex items-center justify-center gap-2">
-            <span>الرهان: 100 🪙 | الجائزة:</span>
-            <span className="text-emerald-400 font-mono text-lg font-black">190 🪙</span>
+          {/* Difficulty & Stake Level Selector */}
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 my-2.5 max-w-lg mx-auto">
+            {STAKE_LEVELS.map((lvl) => {
+              const d = getMatchDifficulty(lvl.stake, false);
+              const isSelected = selectedStake === lvl.stake;
+              return (
+                <button
+                  key={lvl.stake}
+                  type="button"
+                  onClick={() => setSelectedStake(lvl.stake)}
+                  className={`flex flex-col items-center py-1.5 px-1 rounded-xl border text-[10px] font-black transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-amber-400/20 border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.3)] scale-[1.03]"
+                      : "bg-black/45 border-slate-700/80 text-slate-300 hover:border-slate-500"
+                  }`}
+                >
+                  <span className="text-xs">{lvl.icon} {d.labelAr.split(" ")[0]}</span>
+                  <span className="text-amber-400 font-mono text-[10px]">{lvl.stake.toLocaleString()} 🪙</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="text-xs sm:text-sm font-black text-amber-300 mb-3 flex flex-wrap items-center justify-center gap-2">
+            <span>الرهان: {selectedStake.toLocaleString()} 🪙 | الجائزة:</span>
+            <span className="text-emerald-400 font-mono text-base sm:text-lg font-black">{selectedPrize.toLocaleString()} 🪙</span>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded-full border font-bold"
+              style={{ borderColor: diff.badgeColor, color: diff.badgeColor, backgroundColor: "rgba(0,0,0,0.45)" }}
+            >
+              {diff.aimLabelAr}
+            </span>
           </div>
 
           <button
-            onClick={() => onPlayMatchmaking(selectedMode, 100)}
+            onClick={() => onPlayMatchmaking(selectedMode, selectedStake)}
             className="w-full max-w-xs mx-auto py-3 md:py-4 px-8 rounded-2xl font-black text-lg md:text-xl text-white shadow-[0_8px_25px_rgba(34,197,94,0.5)] border-2 border-emerald-300 bg-gradient-to-b from-emerald-400 via-emerald-600 to-emerald-800 hover:from-emerald-300 hover:to-emerald-700 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
           >
             <span>PLAY</span>

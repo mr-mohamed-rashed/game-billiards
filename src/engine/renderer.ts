@@ -104,6 +104,9 @@ export interface RenderSceneParams {
   spinX: number;
   spinY: number;
   aimAssistLong: boolean;
+  aimScale?: number;
+  maxAimDistCap?: number;
+  targetLineScale?: number;
   glossCanvas: HTMLCanvasElement | null;
   tableImageCache: Record<string, HTMLImageElement>;
   cueImageCache: Record<string, HTMLImageElement>;
@@ -131,6 +134,9 @@ export function renderTableScene({
   spinX,
   spinY,
   aimAssistLong,
+  aimScale = 1,
+  maxAimDistCap = 800,
+  targetLineScale = 1,
   glossCanvas,
   tableImageCache,
   cueImageCache,
@@ -488,7 +494,8 @@ export function renderTableScene({
 
     const baseDist = aimAssistLong ? 440 : 270;
     const cueBonusDist = (activeCueObj.stats.aim / 10) * 320;
-    const maxRayDist = isBotAiming ? 260 : baseDist + cueBonusDist;
+    const scaledHumanDist = Math.min(maxAimDistCap, (baseDist + cueBonusDist) * aimScale);
+    const maxRayDist = isBotAiming ? Math.min(260, maxAimDistCap) : scaledHumanDist;
     let closestHitDist = maxRayDist;
 
     let hitBall: Ball | null = null;
@@ -633,8 +640,8 @@ export function renderTableScene({
       ctx.arc(ghostBallPos.x, ghostBallPos.y, ballRadius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Target ball path
-      const targetLineLen = 125 + (activeCueObj.stats.aim / 10) * 90;
+      // Target ball path (scales down on higher-stake pro/legend tables!)
+      const targetLineLen = (125 + (activeCueObj.stats.aim / 10) * 90) * targetLineScale;
       ctx.strokeStyle = isAimedTargetLegal
         ? activeCueObj.category === "legendary"
           ? activeCueObj.glowColor
