@@ -9,10 +9,10 @@ import {
   Pocket,
   SNOOKER_COLOR_ORDER,
   SnookerTargetInfo,
-  TABLE_HEIGHT,
-  TABLE_WIDTH,
   TableGeometry,
   getBreakLineX,
+  getModeBallRadius,
+  getPlayBounds,
   getSnookerSpots,
 } from "@/types/billiards";
 import { playBallClack, playPocketDrop } from "@/utils/audio";
@@ -21,9 +21,10 @@ export function clampBallInHandPos(
   x: number,
   y: number,
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
-  maxAllowedX?: number
+  maxAllowedX?: number,
+  ballRadius: number = BALL_RADIUS
 ): { x: number; y: number } {
-  const { bounds } = geom;
+  const bounds = getPlayBounds(geom, ballRadius);
   const upperX = maxAllowedX !== undefined ? Math.min(bounds.maxX - 2, maxAllowedX) : bounds.maxX - 2;
   return {
     x: Math.min(upperX, Math.max(bounds.minX + 2, x)),
@@ -57,15 +58,16 @@ export function findFreeCueBallPos(
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
   maxAllowedX?: number
 ): { x: number; y: number } {
-  const { bounds } = geom;
+  const r = balls[0]?.radius ?? BALL_RADIUS;
+  const bounds = getPlayBounds(geom, r);
   const centerY = (bounds.minY + bounds.maxY) / 2;
   const rawHeadX =
     maxAllowedX !== undefined
-      ? Math.max(bounds.minX + 18, maxAllowedX - 32)
+      ? Math.max(bounds.minX + 18, maxAllowedX - 28)
       : bounds.minX + (bounds.maxX - bounds.minX) * 0.25;
-  const headX = clampBallInHandPos(rawHeadX, centerY, geom, maxAllowedX).x;
-  const startY = maxAllowedX !== undefined ? centerY + 26 : centerY;
-  const minGap = BALL_RADIUS * 2.25;
+  const headX = clampBallInHandPos(rawHeadX, centerY, geom, maxAllowedX, r).x;
+  const startY = maxAllowedX !== undefined ? centerY + 22 : centerY;
+  const minGap = r * 2.25;
 
   const isFree = (cx: number, cy: number) =>
     !balls.some((b, idx) => idx > 0 && !b.isPotted && Math.hypot(b.x - cx, b.y - cy) < minGap);
@@ -82,7 +84,8 @@ export function findFreeCueBallPos(
         headX + Math.cos(ang) * rad,
         centerY + Math.sin(ang) * rad,
         geom,
-        maxAllowedX
+        maxAllowedX,
+        r
       );
       if (isFree(cand.x, cand.y)) return cand;
     }
@@ -116,9 +119,10 @@ export function moveBreakCueBall(
 ): boolean {
   const cueBall = balls[0];
   if (!cueBall || cueBall.isPotted) return false;
+  const r = cueBall.radius;
 
-  let cand = clampBallInHandPos(x, y, geom, maxAllowedX);
-  const minGap = BALL_RADIUS * 2.15;
+  let cand = clampBallInHandPos(x, y, geom, maxAllowedX, r);
+  const minGap = r * 2.15;
 
   const overlapsAny = (cx: number, cy: number) =>
     balls.some((b, idx) => idx > 0 && !b.isPotted && Math.hypot(b.x - cx, b.y - cy) < minGap);
@@ -134,7 +138,8 @@ export function moveBreakCueBall(
         blocker.x + (dx / d) * (minGap + 1),
         blocker.y + (dy / d) * (minGap + 1),
         geom,
-        maxAllowedX
+        maxAllowedX,
+        r
       );
     }
     if (overlapsAny(cand.x, cand.y)) return false;
@@ -152,7 +157,8 @@ export function initBallsRack(
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
 ): Ball[] {
   const balls: Ball[] = [];
-  const { bounds } = geom;
+  const ballRadius = getModeBallRadius(mode);
+  const bounds = getPlayBounds(geom, ballRadius);
   const tableLeft = bounds.minX;
   const tableRight = bounds.maxX;
   const centerY = (bounds.minY + bounds.maxY) / 2;
@@ -160,11 +166,11 @@ export function initBallsRack(
 
   balls.push({
     id: 0,
-    x: mode === "snooker" ? Math.max(tableLeft + 18, breakLineX - 32) : breakLineX,
-    y: mode === "snooker" ? centerY + 26 : centerY,
+    x: mode === "snooker" ? Math.max(tableLeft + 14, breakLineX - 28) : breakLineX,
+    y: mode === "snooker" ? centerY + 22 : centerY,
     vx: 0,
     vy: 0,
-    radius: BALL_RADIUS,
+    radius: ballRadius,
     color: "#f8fafc",
     number: 0,
     type: "cue",
@@ -180,7 +186,7 @@ export function initBallsRack(
   if (mode === "8-ball") {
     const RACK_NUMBERS = [1, 9, 2, 3, 8, 10, 11, 4, 12, 5, 13, 6, 14, 7, 15];
     const apexX = tableLeft + (tableRight - tableLeft) * 0.72;
-    const spacing = BALL_RADIUS * 2.04;
+    const spacing = ballRadius * 2.04;
     const rowSpacing = spacing * Math.cos(Math.PI / 6);
 
     let ballIdx = 0;
@@ -197,7 +203,7 @@ export function initBallsRack(
           y: startY + c * spacing,
           vx: 0,
           vy: 0,
-          radius: BALL_RADIUS,
+          radius: ballRadius,
           color: cfg.color,
           number: ballNum,
           type: cfg.type,
@@ -209,7 +215,7 @@ export function initBallsRack(
   } else {
     let sId = 1;
     const { apexX, spots } = getSnookerSpots(geom);
-    const spacing = BALL_RADIUS * 2.05;
+    const spacing = ballRadius * 2.05;
     const rowSpacing = spacing * Math.cos(Math.PI / 6);
 
     for (let r = 0; r < 5; r++) {
@@ -223,7 +229,7 @@ export function initBallsRack(
           y: startY + c * spacing,
           vx: 0,
           vy: 0,
-          radius: BALL_RADIUS,
+          radius: ballRadius,
           color: "#dc2626",
           number: 1,
           type: "red",
@@ -242,7 +248,7 @@ export function initBallsRack(
         y: c.y,
         vx: 0,
         vy: 0,
-        radius: BALL_RADIUS,
+        radius: ballRadius,
         color: c.color,
         number: c.val,
         type: "color",
@@ -261,8 +267,9 @@ export function respotBall(
   balls: Ball[],
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
 ) {
-  const { bounds } = geom;
-  const minGap = BALL_RADIUS * 2.08;
+  const r = ball.radius;
+  const bounds = getPlayBounds(geom, r);
+  const minGap = r * 2.08;
   const isSpotFree = (tx: number, ty: number) =>
     !balls.some((b) => b.id !== ball.id && !b.isPotted && Math.hypot(b.x - tx, b.y - ty) < minGap);
 
@@ -290,7 +297,7 @@ export function respotBall(
     // Fallback: closest free spot along center line toward top cushion, then spiral
     if (!placed) {
       for (let step = 1; step <= 18; step++) {
-        const candX = Math.min(bounds.maxX - 2, ownSpot.x + step * BALL_RADIUS * 2.15);
+        const candX = Math.min(bounds.maxX - 2, ownSpot.x + step * r * 2.15);
         if (isSpotFree(candX, centerY)) {
           targetX = candX;
           targetY = centerY;
@@ -301,11 +308,11 @@ export function respotBall(
     }
     if (!placed) {
       for (let ring = 1; ring <= 14 && !placed; ring++) {
-        const rad = ring * BALL_RADIUS * 2.15;
+        const rad = ring * r * 2.15;
         const steps = 8 + ring * 2;
         for (let k = 0; k < steps; k++) {
           const ang = (k / steps) * Math.PI * 2;
-          const cand = clampBallInHandPos(ownSpot.x + Math.cos(ang) * rad, ownSpot.y + Math.sin(ang) * rad, geom);
+          const cand = clampBallInHandPos(ownSpot.x + Math.cos(ang) * rad, ownSpot.y + Math.sin(ang) * rad, geom, undefined, r);
           if (isSpotFree(cand.x, cand.y)) {
             targetX = cand.x;
             targetY = cand.y;
@@ -332,10 +339,10 @@ export function respotBall(
   let targetY = footSpotY;
 
   while (!isSpotFree(targetX, targetY)) {
-    targetX += BALL_RADIUS * 2.2;
+    targetX += r * 2.2;
     if (targetX > bounds.maxX - 5) {
       targetX = footSpotX;
-      targetY += BALL_RADIUS * 2.2;
+      targetY += r * 2.2;
     }
   }
 
@@ -380,7 +387,8 @@ const SUB_STEPS = 10;
 const MAX_SPEED = 42;
 
 function clampBallToStraightCushions(b: Ball, geom: TableGeometry) {
-  const { bounds, railSpans } = geom;
+  const { railSpans } = geom;
+  const bounds = getPlayBounds(geom, b.radius);
   if (
     b.y < bounds.minY &&
     ((b.x > railSpans.topLeftEndX && b.x < railSpans.topMidStartX) ||
@@ -422,7 +430,7 @@ export function stepPhysics({
   if (ballCount === 0) return false;
 
   const geom = tableCfg.geometry;
-  const { bounds, railSpans, pockets, jaws } = geom;
+  const { railSpans, pockets, jaws } = geom;
 
   // Smooth exponential cloth damping + gentle tapered rolling resistance (no abrupt brake feel)
   const linearDamping = tableCfg.clothFriction ?? tableCfg.friction ?? 0.9927;
@@ -435,9 +443,9 @@ export function stepPhysics({
   const cushionSpinGrip = tableCfg.spinGrip ?? 1.0;
   const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
 
-  // Legendary Cue Perks
-  const pocketDropBonus = cueActive.id === "cue_angelic_seraph" ? 5 : 2;
-  const funnelPullBase = cueActive.id === "cue_angelic_seraph" ? 0.58 : 0.48;
+  // Legendary Cue Perks & Natural Pocket Drop Tolerance
+  const pocketDropBonus = cueActive.id === "cue_angelic_seraph" ? 6 : 4;
+  const funnelPullBase = cueActive.id === "cue_angelic_seraph" ? 0.72 : 0.58;
   const screwPerkMult = cueActive.id === "cue_volcanic_magma" ? 1.65 : 1.0;
   const isDeadStopCue = cueActive.id === "cue_nature_druid";
 
@@ -447,6 +455,7 @@ export function stepPhysics({
     for (let bi = 0; bi < ballCount; bi++) {
       const ball = balls[bi];
       if (ball.isPotted) continue;
+      const bounds = getPlayBounds(geom, ball.radius);
 
       ball.x += ball.vx * invSub;
       ball.y += ball.vy * invSub;
@@ -533,13 +542,13 @@ export function stepPhysics({
         }
       }
 
-      // Pocket Drop & Funnel Suction (aligned to exact pocket rim)
+      // Pocket Drop & Funnel Suction (aligned to exact pocket rim; accepts soft & firm shots smoothly)
       for (let pi = 0; pi < pockets.length; pi++) {
         const p = pockets[pi];
         const dx = p.x - ball.x;
         const dy = p.y - ball.y;
         const dist = Math.hypot(dx, dy);
-        const funnelRadius = p.r + 10;
+        const funnelRadius = p.r + 12;
 
         if (dist < funnelRadius && dist > 0.5) {
           const pull = funnelPullBase * (1 - dist / funnelRadius) * effectiveScale;
@@ -746,13 +755,14 @@ function isSegmentClear(
   bx: number,
   by: number,
   balls: Ball[],
-  ignoreIds: Set<number>
+  ignoreIds: Set<number>,
+  ballRadius: number = BALL_RADIUS
 ): boolean {
   const abx = bx - ax;
   const aby = by - ay;
   const abLenSq = abx * abx + aby * aby;
   if (abLenSq < 1) return true;
-  const minClearSq = Math.pow(BALL_RADIUS * 2.02, 2);
+  const minClearSq = Math.pow(ballRadius * 2.02, 2);
 
   for (let i = 0; i < balls.length; i++) {
     const o = balls[i];
@@ -782,7 +792,9 @@ export function computeBotShot(
 ): BotShotPlan | null {
   const cueBall = balls[0];
   if (!cueBall || cueBall.isPotted) return null;
-  const { pockets, bounds } = geom;
+  const ballRadius = cueBall.radius || getModeBallRadius(mode);
+  const bounds = getPlayBounds(geom, ballRadius);
+  const { pockets } = geom;
 
   const candidateBalls = balls.filter((b) => {
     if (b.isPotted || b.type === "cue") return false;
@@ -821,8 +833,8 @@ export function computeBotShot(
       const uBPy = toPy / distBP;
 
       // Ghost ball impact point
-      const gx = target.x - uBPx * (BALL_RADIUS * 2);
-      const gy = target.y - uBPy * (BALL_RADIUS * 2);
+      const gx = target.x - uBPx * (ballRadius * 2);
+      const gy = target.y - uBPy * (ballRadius * 2);
       if (gx < bounds.minX - 6 || gx > bounds.maxX + 6 || gy < bounds.minY - 6 || gy > bounds.maxY + 6) continue;
 
       const toGx = gx - cueBall.x;
@@ -835,8 +847,8 @@ export function computeBotShot(
       const cutDot = uCGx * uBPx + uCGy * uBPy;
       if (cutDot <= 0.18) continue; // Impossible >80 deg cut
 
-      const clearCueToGhost = isSegmentClear(cueBall.x, cueBall.y, gx, gy, balls, ignore);
-      const clearBallToPocket = isSegmentClear(target.x, target.y, p.x, p.y, balls, ignore);
+      const clearCueToGhost = isSegmentClear(cueBall.x, cueBall.y, gx, gy, balls, ignore, ballRadius);
+      const clearBallToPocket = isSegmentClear(target.x, target.y, p.x, p.y, balls, ignore, ballRadius);
 
       let score = cutDot * 120 - (distCG + distBP) * 0.08;
       if (mode === "snooker" && snookerTarget?.phase === "color") {

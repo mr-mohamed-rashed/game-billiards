@@ -6,6 +6,7 @@
     "nameAr": "طاولة البطولة الكلاسيكية (الأساسية)",
     "nameEn": "Classic Championship Wood",
     "image": "/tables/table_classic_pro.jpg",
+    "sideImage": "/tables/table_classic_pro_side.jpg",
     "price": 0,
     "currency": "coins",
     "cushionGlow": "#22c55e",
@@ -14,6 +15,7 @@
     "clothFriction": 0.9927,
     "rollingResistance": 0.0120,
     "spinGrip": 1.00,
+    "walls": { "left": 75, "right": 825, "top": 54, "bottom": 390 },
     "ambientEffect": "none",
     "descriptionAr": "طاولة خشب الماهوجني المعتق الكلاسيكية مع قماش صوف ميرينو الأخضر وزوايا النحاس المعتمدة دولياً."
   },
@@ -24,6 +26,7 @@
     "nameAr": "طاولة الغابة المسحورة (Enchanted Forest)",
     "nameEn": "Enchanted Druid Forest",
     "image": "/tables/table_enchanted_forest.jpg",
+    "sideImage": "/tables/table_enchanted_forest_side.jpg",
     "price": 20000,
     "currency": "coins",
     "cushionGlow": "#4ade80",
@@ -32,6 +35,7 @@
     "clothFriction": 0.9930,
     "rollingResistance": 0.0115,
     "spinGrip": 1.02,
+    "walls": { "left": 76, "right": 823, "top": 51, "bottom": 390 },
     "ambientEffect": "forest",
     "descriptionAr": "إطارات من أغصان الشجر الأزلية وأوراق خضراء حية تمنح الطاولة روح الطبيعة وسحر الغابات الخضراء."
   },
@@ -42,6 +46,7 @@
     "nameAr": "طاولة الصقيع والجليد المتجمد (Glacial Frost)",
     "nameEn": "Glacial Frost Ice Table",
     "image": "/tables/table_ice_frost.jpg",
+    "sideImage": "/tables/table_ice_frost_side.jpg",
     "price": 35000,
     "currency": "coins",
     "cushionGlow": "#38bdf8",
@@ -50,6 +55,7 @@
     "clothFriction": 0.9933,
     "rollingResistance": 0.0110,
     "spinGrip": 1.035,
+    "walls": { "left": 76, "right": 825, "top": 52, "bottom": 395 },
     "ambientEffect": "frost",
     "descriptionAr": "منحوتة من صقيع القطب الشمالي مع بلورات ثلجية متجمدة وانزلاق فائق النعومة للكرات."
   },
@@ -60,6 +66,7 @@
     "nameAr": "طاولة التكنولوجيا المستقبلية (Cyber Tech)",
     "nameEn": "Future Cyber Tech 2077",
     "image": "/tables/table_future_tech.jpg",
+    "sideImage": "/tables/table_future_tech_side.jpg",
     "price": 50000,
     "currency": "coins",
     "cushionGlow": "#06b6d4",
@@ -68,6 +75,7 @@
     "clothFriction": 0.9935,
     "rollingResistance": 0.0106,
     "spinGrip": 1.05,
+    "walls": { "left": 76, "right": 825, "top": 52, "bottom": 396 },
     "ambientEffect": "cyber",
     "descriptionAr": "هيكل معدني مستقبلي بدوائر إلكترونية متوهجة بإضاءات النيون السيان والبنفسجي الرقمية فائقة الحساب."
   },
@@ -78,6 +86,7 @@
     "nameAr": "طاولة الصلب الصناعي (Industrial Steel)",
     "nameEn": "Industrial Steampunk Steel",
     "image": "/tables/table_industrial_steel.jpg",
+    "sideImage": "/tables/table_industrial_steel_side.jpg",
     "price": 65000,
     "currency": "coins",
     "cushionGlow": "#fb923c",
@@ -86,6 +95,7 @@
     "clothFriction": 0.9937,
     "rollingResistance": 0.0103,
     "spinGrip": 1.065,
+    "walls": { "left": 74, "right": 821, "top": 51, "bottom": 396 },
     "ambientEffect": "industrial",
     "descriptionAr": "صفائح صلب مقواة ومسامير برشام نحاسية مع تروس ستيمبانك وجيوب شبكية صناعية عتيدة."
   },
@@ -96,6 +106,7 @@
     "nameAr": "طاولة الذهب الملكي والأرجوان (Royal Imperial)",
     "nameEn": "Royal Imperial Purple & Gold",
     "image": "/tables/table_royal_purple.jpg",
+    "sideImage": "/tables/table_royal_purple_side.jpg",
     "price": 80000,
     "currency": "coins",
     "cushionGlow": "#fbbf24",
@@ -104,6 +115,7 @@
     "clothFriction": 0.9939,
     "rollingResistance": 0.0100,
     "spinGrip": 1.08,
+    "walls": { "left": 74, "right": 827, "top": 54, "bottom": 397 },
     "ambientEffect": "royal",
     "descriptionAr": "إطارات عاجية مذهبة بنقوش أرستقراطية وقماش مخملي أرجواني فاخر تليق بأباطرة وملوك لعبة البلياردو."
   },
@@ -114,6 +126,7 @@
     "nameAr": "طاولة البرق والرعد (Thunder & Lightning)",
     "nameEn": "Thunderstorm Arcane Lightning",
     "image": "/tables/table_lightning.jpg",
+    "sideImage": "/tables/table_lightning_side.jpg",
     "price": 95000,
     "currency": "coins",
     "cushionGlow": "#a855f7",
@@ -122,6 +135,7 @@
     "clothFriction": 0.9940,
     "rollingResistance": 0.0098,
     "spinGrip": 1.095,
+    "walls": { "left": 76, "right": 824, "top": 58, "bottom": 389 },
     "ambientEffect": "lightning",
     "descriptionAr": "صواعق كهربية زرقاء وبنفسجية مشحونة بطاقة الرعد تطلق شرارات ضوئية عند اصطدام الكرات."
   },
@@ -132,6 +146,7 @@
     "nameAr": "طاولة الحمم البركانية (Inferno Magma)",
     "nameEn": "Inferno Volcanic Magma Table",
     "image": "/tables/table_volcanic_lava.jpg",
+    "sideImage": "/tables/table_volcanic_lava_side.jpg",
     "price": 110000,
     "currency": "coins",
     "cushionGlow": "#ea580c",
@@ -140,6 +155,7 @@
     "clothFriction": 0.9941,
     "rollingResistance": 0.0096,
     "spinGrip": 1.11,
+    "walls": { "left": 74, "right": 823, "top": 55, "bottom": 394 },
     "ambientEffect": "magma",
     "descriptionAr": "حواف صخرية متصدعة تتدفق بحمم الصهارة المشتعلة مع ارتدادات حركية قوية لا ترحم."
   },
@@ -150,6 +166,7 @@
     "nameAr": "طاولة السديم الكوني (Cosmic Nebula)",
     "nameEn": "Cosmic Nebula & Galaxies",
     "image": "/tables/table_cosmic_nebula.jpg",
+    "sideImage": "/tables/table_cosmic_nebula_side.jpg",
     "price": 130000,
     "currency": "coins",
     "cushionGlow": "#60a5fa",
@@ -158,6 +175,7 @@
     "clothFriction": 0.9942,
     "rollingResistance": 0.0094,
     "spinGrip": 1.12,
+    "walls": { "left": 74, "right": 823, "top": 57, "bottom": 389 },
     "ambientEffect": "cosmic",
     "descriptionAr": "مجرات حلزونية سابحة وثقوب سوداء تمتص الكرات في أرجاء الفضاء السحيق بإطار كروم ناصع."
   }

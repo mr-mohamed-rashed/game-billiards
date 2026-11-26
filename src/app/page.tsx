@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { ALL_CUES, ALL_TABLES, CueItem, TableItem } from "@/config/shopData";
 import {
   ActiveModalType,
-  BALL_RADIUS,
   Ball,
   BallGroup,
   CinematicCamState,
@@ -13,6 +12,7 @@ import {
   TABLE_HEIGHT,
   TABLE_WIDTH,
   getBreakLineX,
+  getModeBallRadius,
   getSnookerTargetInfo,
 } from "@/types/billiards";
 import {
@@ -43,6 +43,7 @@ import { ShopModal } from "@/components/ShopModal";
 import { GameModals } from "@/components/GameModals";
 import { TableHUD } from "@/components/TableHUD";
 import { PowerMeter } from "@/components/PowerMeter";
+import { TableEntranceOverlay } from "@/components/TableEntranceOverlay";
 
 export default function BilliardsStandalonePage() {
   return (
@@ -125,6 +126,7 @@ function CueMasterApp() {
   const [isShooting, setIsShooting] = useState(false);
   const [gameOver, setGameOver] = useState<string | null>(null);
   const [cinematicCam, setCinematicCam] = useState<CinematicCamState | null>(null);
+  const [showTableEntrance, setShowTableEntrance] = useState(false);
 
   // Orientation & Responsive Sizing
   const [isPortrait, setIsPortrait] = useState(false);
@@ -349,7 +351,7 @@ function CueMasterApp() {
   };
 
   useEffect(() => {
-    if (currentView !== "table" || isShooting || gameOver || isPractice) return;
+    if (currentView !== "table" || isShooting || gameOver || isPractice || showTableEntrance) return;
     setTurnTimeLeft(turnTotalTime);
 
     const timer = setInterval(() => {
@@ -364,7 +366,7 @@ function CueMasterApp() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentView, turn, isShooting, gameOver, isPractice, turnTotalTime]);
+  }, [currentView, turn, isShooting, gameOver, isPractice, turnTotalTime, showTableEntrance]);
 
   const initBalls = (currentMode: GameMode) => {
     ballsRef.current = initBallsRack(currentMode, getActiveGeom());
@@ -683,10 +685,11 @@ function CueMasterApp() {
     modeRef.current === "snooker" ? getBreakLineX("snooker", getActiveGeom()) : undefined;
 
   const tryPlaceBallInHand = (x: number, y: number) => {
-    const clamped = clampBallInHandPos(x, y, getActiveGeom(), getBallInHandMaxX());
+    const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
+    const clamped = clampBallInHandPos(x, y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
     const isOverlapping = ballsRef.current
       .slice(1)
-      .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < BALL_RADIUS * 2.2);
+      .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < ballRadius * 2.2);
     if (!isOverlapping) {
       const cueBall = ballsRef.current[0];
       if (cueBall) {
@@ -719,7 +722,8 @@ function CueMasterApp() {
 
     if (isBallInHandRef.current) {
       if (isDraggingBallInHandRef.current || e.pointerType === "mouse") {
-        ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX());
+        const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
+        ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
       }
       return;
     }
@@ -754,7 +758,8 @@ function CueMasterApp() {
 
     if (isBallInHandRef.current) {
       isDraggingBallInHandRef.current = true;
-      ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX());
+      const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
+      ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
       return;
     }
@@ -765,7 +770,7 @@ function CueMasterApp() {
         isBreakShotRef.current &&
         cueBall &&
         !cueBall.isPotted &&
-        Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= BALL_RADIUS * 2.8
+        Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= Math.max(24, cueBall.radius * 2.8)
       ) {
         isDraggingBreakCueRef.current = true;
         const geom = getActiveGeom();
@@ -790,8 +795,9 @@ function CueMasterApp() {
     if (isBallInHandRef.current && isDraggingBallInHandRef.current) {
       isDraggingBallInHandRef.current = false;
       const coords = getCanvasCoords(e.clientX, e.clientY);
+      const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
       const target = coords
-        ? clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX())
+        ? clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius)
         : ballInHandHoverPosRef.current;
       if (target) tryPlaceBallInHand(target.x, target.y);
     }
@@ -1077,6 +1083,8 @@ function CueMasterApp() {
       if (portrait) setIsVirtualLandscape(true);
     }
 
+    setShowTableEntrance(true);
+    if (soundEnabledRef.current) playCinematicWhoosh();
     setCurrentView("table");
   };
 
@@ -1160,7 +1168,7 @@ function CueMasterApp() {
       ) : (
         <div
           dir="ltr"
-          className="w-full h-full flex flex-col bg-[#020b14] overflow-hidden touch-none"
+          className="relative w-full h-full flex flex-col bg-[#020b14] overflow-hidden touch-none"
           style={rotatedStyle ? { ...rotatedStyle, zIndex: 50 } : undefined}
         >
           <TableHUD
@@ -1225,11 +1233,24 @@ function CueMasterApp() {
             }}
             onToggleVirtualLandscape={() => setIsVirtualLandscape((v) => !v)}
             onExit={() => {
+              setShowTableEntrance(false);
               setGameOver(null);
               setIsVirtualLandscape(false);
               setCurrentView("menu");
             }}
           />
+
+          {showTableEntrance && (
+            <TableEntranceOverlay
+              table={currentTable}
+              mode={mode}
+              username={username}
+              opponentName={opponentName}
+              isPractice={isPractice}
+              prize={prize}
+              onFinish={() => setShowTableEntrance(false)}
+            />
+          )}
 
           {groupAnnouncement && (
             <div

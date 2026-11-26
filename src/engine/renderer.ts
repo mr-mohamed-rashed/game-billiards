@@ -11,6 +11,8 @@ import {
   TABLE_WIDTH,
   TableGeometry,
   getBreakLineX,
+  getModeBallRadius,
+  getPlayBounds,
   getSnookerSpots,
 } from "@/types/billiards";
 
@@ -170,21 +172,23 @@ export function renderTableScene({
     ctx.drawImage(cachedBg, 0, 0);
   }
 
-  const { bounds, pockets } = tableCfg.geometry;
+  const { walls, pockets } = tableCfg.geometry;
+  const ballRadius = balls[0]?.radius ?? getModeBallRadius(mode);
+  const bounds = getPlayBounds(tableCfg.geometry, ballRadius);
   const breakLineX = getBreakLineX(mode, tableCfg.geometry);
 
   // Snooker Baulk Line, "D" Zone & Color Spot Markers
   if (mode === "snooker") {
-    const { baulkX, centerY, spots } = getSnookerSpots(tableCfg.geometry);
+    const { baulkX, centerY, dRadius, spots } = getSnookerSpots(tableCfg.geometry);
     ctx.strokeStyle = "rgba(255,255,255,0.28)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(baulkX, bounds.minY - BALL_RADIUS);
-    ctx.lineTo(baulkX, bounds.maxY + BALL_RADIUS);
+    ctx.moveTo(baulkX, walls.top);
+    ctx.lineTo(baulkX, walls.bottom);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(baulkX, centerY, 60, -Math.PI / 2, Math.PI / 2, true);
+    ctx.arc(baulkX, centerY, dRadius, -Math.PI / 2, Math.PI / 2, true);
     ctx.stroke();
 
     // Subtle spot markers on the felt for the 6 Snooker colors
@@ -193,10 +197,10 @@ export function renderTableScene({
     for (let si = 0; si < spots.length; si++) {
       const sp = spots[si];
       ctx.beginPath();
-      ctx.moveTo(sp.x - 4, sp.y);
-      ctx.lineTo(sp.x + 4, sp.y);
-      ctx.moveTo(sp.x, sp.y - 4);
-      ctx.lineTo(sp.x, sp.y + 4);
+      ctx.moveTo(sp.x - 3.5, sp.y);
+      ctx.lineTo(sp.x + 3.5, sp.y);
+      ctx.moveTo(sp.x, sp.y - 3.5);
+      ctx.lineTo(sp.x, sp.y + 3.5);
       ctx.stroke();
     }
   }
@@ -208,18 +212,18 @@ export function renderTableScene({
   ) {
     ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
     ctx.fillRect(
-      bounds.minX - BALL_RADIUS,
-      bounds.minY - BALL_RADIUS,
-      breakLineX - (bounds.minX - BALL_RADIUS),
-      bounds.maxY - bounds.minY + BALL_RADIUS * 2
+      walls.left,
+      walls.top,
+      breakLineX - walls.left,
+      walls.bottom - walls.top
     );
     ctx.save();
     ctx.strokeStyle = "rgba(56, 189, 248, 0.72)";
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
-    ctx.moveTo(breakLineX, bounds.minY - BALL_RADIUS);
-    ctx.lineTo(breakLineX, bounds.maxY + BALL_RADIUS);
+    ctx.moveTo(breakLineX, walls.top);
+    ctx.lineTo(breakLineX, walls.bottom);
     ctx.stroke();
     ctx.restore();
   }
@@ -409,13 +413,13 @@ export function renderTableScene({
       if (!isShooting && (Math.abs(spinX) > 0.05 || Math.abs(spinY) > 0.05)) {
         ctx.fillStyle = "#ef4444";
         ctx.beginPath();
-        ctx.arc(ball.x + spinX * 7, ball.y + spinY * 7, 2.5, 0, Math.PI * 2);
+        ctx.arc(ball.x + spinX * (r * 0.58), ball.y + spinY * (r * 0.58), Math.max(1.8, r * 0.2), 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
     if (glossCanvas) {
-      ctx.drawImage(glossCanvas, ball.x - r - 1, ball.y - r - 1);
+      ctx.drawImage(glossCanvas, ball.x - r - 1, ball.y - r - 1, r * 2 + 2, r * 2 + 2);
     }
   }
 
@@ -423,13 +427,15 @@ export function renderTableScene({
   if (isBallInHand && ballInHandHoverPos) {
     ctx.fillStyle = "#f8fafc";
     ctx.beginPath();
-    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, BALL_RADIUS, 0, Math.PI * 2);
+    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, ballRadius, 0, Math.PI * 2);
     ctx.fill();
     if (glossCanvas) {
       ctx.drawImage(
         glossCanvas,
-        ballInHandHoverPos.x - BALL_RADIUS - 1,
-        ballInHandHoverPos.y - BALL_RADIUS - 1
+        ballInHandHoverPos.x - ballRadius - 1,
+        ballInHandHoverPos.y - ballRadius - 1,
+        ballRadius * 2 + 2,
+        ballRadius * 2 + 2
       );
     }
 
@@ -438,7 +444,7 @@ export function renderTableScene({
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, BALL_RADIUS + 3, 0, Math.PI * 2);
+    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, ballRadius + 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
@@ -463,12 +469,12 @@ export function renderTableScene({
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 3]);
     ctx.beginPath();
-    ctx.arc(cueBall.x, cueBall.y, BALL_RADIUS + 5, 0, Math.PI * 2);
+    ctx.arc(cueBall.x, cueBall.y, ballRadius + 5, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.font = "13px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("↔️", cueBall.x, cueBall.y - BALL_RADIUS - 8);
+    ctx.fillText("↔️", cueBall.x, cueBall.y - ballRadius - 8);
     ctx.restore();
   }
 
@@ -478,7 +484,7 @@ export function renderTableScene({
   if (canShowAim) {
     const cosA = Math.cos(aimAngle);
     const sinA = Math.sin(aimAngle);
-    const collisionRadius = BALL_RADIUS * 2;
+    const collisionRadius = ballRadius * 2;
 
     const baseDist = aimAssistLong ? 440 : 270;
     const cueBonusDist = (activeCueObj.stats.aim / 10) * 320;
@@ -588,7 +594,7 @@ export function renderTableScene({
       ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
       ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(endAimX, endAimY, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.arc(endAimX, endAimY, ballRadius, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -624,7 +630,7 @@ export function renderTableScene({
       ctx.strokeStyle = isAimedTargetLegal ? "rgba(255, 255, 255, 0.75)" : "rgba(239, 68, 68, 0.85)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(ghostBallPos.x, ghostBallPos.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.arc(ghostBallPos.x, ghostBallPos.y, ballRadius, 0, Math.PI * 2);
       ctx.stroke();
 
       // Target ball path
@@ -676,7 +682,7 @@ export function renderTableScene({
 
       ctx.fillStyle = isAimedTargetLegal ? "rgba(250, 204, 21, 0.32)" : "rgba(239, 68, 68, 0.4)";
       ctx.beginPath();
-      ctx.arc(hitBall.x, hitBall.y, BALL_RADIUS + 3, 0, Math.PI * 2);
+      ctx.arc(hitBall.x, hitBall.y, ballRadius + 3, 0, Math.PI * 2);
       ctx.fill();
 
       if (!isAimedTargetLegal && warningText) {
@@ -688,9 +694,10 @@ export function renderTableScene({
     }
 
     // 6. Transparent Cue Stick with Dynamic Pull-Back
-    const cueOffset = BALL_RADIUS + 8 + (power / 100) * 85;
+    const cueOffset = ballRadius + 8 + (power / 100) * 85;
     const cueDrawLength = 360;
-    const cueDrawThickness = activeCueObj.category === "legendary" ? 21 : 13;
+    const baseCueThickness = activeCueObj.category === "legendary" ? 21 : 13;
+    const cueDrawThickness = mode === "snooker" ? Math.round(baseCueThickness * 0.82) : baseCueThickness;
     const cueImg = activeCueObj.image ? cueImageCache[activeCueObj.id] : null;
 
     ctx.save();

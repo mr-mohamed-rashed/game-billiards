@@ -82,6 +82,21 @@ export const TABLE_WIDTH = 900;
 export const TABLE_HEIGHT = 450;
 export const CUSHION = 30;
 export const BALL_RADIUS = 12;
+export const SNOOKER_BALL_RADIUS = 8.5;
+export const SNOOKER_D_RADIUS = 56;
+
+export function getModeBallRadius(mode: GameMode): number {
+  return mode === "snooker" ? SNOOKER_BALL_RADIUS : BALL_RADIUS;
+}
+
+export function getPlayBounds(geom: TableGeometry, ballRadius: number) {
+  return {
+    minX: geom.walls.left + ballRadius,
+    maxX: geom.walls.right - ballRadius,
+    minY: geom.walls.top + ballRadius,
+    maxY: geom.walls.bottom - ballRadius,
+  };
+}
 
 export function buildTableGeometry(spec: {
   walls: { left: number; right: number; top: number; bottom: number };
@@ -112,8 +127,8 @@ export function buildTableGeometry(spec: {
   ];
 
   // Derive straight cushion mouth spans directly from walls & pocket holes
-  const cornerClear = 9;
-  const midClear = 8;
+  const cornerClear = 12;
+  const midClear = 10;
   const railSpans = {
     topLeftEndX: Math.max(bounds.minX + 4, pk.tl[0] + pk.tl[2] + cornerClear),
     topMidStartX: pk.tm[0] - pk.tm[2] - midClear,
@@ -129,7 +144,7 @@ export function buildTableGeometry(spec: {
     rightBotStartY: Math.min(bounds.maxY - 4, pk.br[1] - pk.br[2] - cornerClear),
   };
 
-  const jawR = 6;
+  const jawR = 5;
   const jaws: { x: number; y: number; r: number }[] = [
     // Top rail jaws (surface sits flush at walls.top)
     { x: railSpans.topLeftEndX, y: walls.top - jawR, r: jawR },
@@ -152,16 +167,31 @@ export function buildTableGeometry(spec: {
   return { walls, bounds, railSpans, pockets, jaws };
 }
 
-export const DEFAULT_TABLE_GEOMETRY: TableGeometry = buildTableGeometry({
-  walls: { left: 74, right: 826, top: 50, bottom: 400 },
-  pockets: {
-    tl: [64, 44, 20],
-    tm: [450, 35, 19],
-    tr: [836, 44, 20],
-    bl: [64, 406, 20],
-    bm: [450, 415, 19],
-    br: [836, 406, 20],
-  },
+export function buildTableGeometryFromWalls(walls: {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}): TableGeometry {
+  const midX = (walls.left + walls.right) / 2;
+  return buildTableGeometry({
+    walls,
+    pockets: {
+      tl: [walls.left - 3, walls.top - 2, 23],
+      tm: [midX, walls.top - 10, 22],
+      tr: [walls.right + 3, walls.top - 2, 23],
+      bl: [walls.left - 3, walls.bottom + 2, 23],
+      bm: [midX, walls.bottom + 10, 22],
+      br: [walls.right + 3, walls.bottom + 2, 23],
+    },
+  });
+}
+
+export const DEFAULT_TABLE_GEOMETRY: TableGeometry = buildTableGeometryFromWalls({
+  left: 75,
+  right: 825,
+  top: 54,
+  bottom: 390,
 });
 
 export const POCKETS: Pocket[] = DEFAULT_TABLE_GEOMETRY.pockets;
@@ -189,29 +219,29 @@ export function getBreakLineX(
   mode: GameMode,
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
 ): number {
-  const { bounds } = geom;
-  const span = bounds.maxX - bounds.minX;
-  return mode === "snooker" ? bounds.minX + span * 0.22 : bounds.minX + span * 0.25;
+  const { walls } = geom;
+  const span = walls.right - walls.left;
+  return mode === "snooker" ? walls.left + span * 0.21 : walls.left + span * 0.25;
 }
 
 export function getSnookerSpots(geom: TableGeometry = DEFAULT_TABLE_GEOMETRY) {
-  const { bounds } = geom;
-  const tableLeft = bounds.minX;
-  const tableRight = bounds.maxX;
-  const centerY = (bounds.minY + bounds.maxY) / 2;
-  const centerX = (tableLeft + tableRight) / 2;
+  const { walls } = geom;
+  const span = walls.right - walls.left;
+  const centerY = (walls.top + walls.bottom) / 2;
+  const centerX = (walls.left + walls.right) / 2;
   const baulkX = getBreakLineX("snooker", geom);
-  const apexX = tableLeft + (tableRight - tableLeft) * 0.75;
-  const pinkX = apexX - BALL_RADIUS * 2.18;
-  const blackX = tableRight - 55;
+  const pinkX = walls.left + span * 0.74;
+  const apexX = pinkX + SNOOKER_BALL_RADIUS * 2.15;
+  const blackX = walls.right - 68;
 
   return {
     baulkX,
     apexX,
     centerY,
+    dRadius: SNOOKER_D_RADIUS,
     spots: [
-      { val: 2, color: "#facc15", x: baulkX, y: centerY + 60 },
-      { val: 3, color: "#16a34a", x: baulkX, y: centerY - 60 },
+      { val: 2, color: "#facc15", x: baulkX, y: centerY + SNOOKER_D_RADIUS },
+      { val: 3, color: "#16a34a", x: baulkX, y: centerY - SNOOKER_D_RADIUS },
       { val: 4, color: "#78350f", x: baulkX, y: centerY },
       { val: 5, color: "#2563eb", x: centerX, y: centerY },
       { val: 6, color: "#ec4899", x: pinkX, y: centerY },

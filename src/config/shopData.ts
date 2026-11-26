@@ -1,4 +1,4 @@
-import { DEFAULT_TABLE_GEOMETRY, TableGeometry } from "@/types/billiards";
+import { DEFAULT_TABLE_GEOMETRY, TableGeometry, buildTableGeometryFromWalls } from "@/types/billiards";
 import tablesConfig from "./tablesConfig.json";
 
 export interface CueStats {
@@ -32,6 +32,7 @@ export interface TableItem {
   nameAr: string;
   nameEn: string;
   image?: string;
+  sideImage?: string;
   price: number;
   currency: 'coins' | 'gems';
   cushionGlow: string;
@@ -343,6 +344,7 @@ export const ALL_TABLES: TableItem[] = tablesConfig.map((t) => ({
   nameAr: t.nameAr,
   nameEn: t.nameEn,
   image: t.image,
+  sideImage: t.sideImage,
   price: t.price,
   currency: t.currency as 'coins' | 'gems',
   cushionGlow: t.cushionGlow,
@@ -355,5 +357,5 @@ export const ALL_TABLES: TableItem[] = tablesConfig.map((t) => ({
   bounceRestitution: t.cushionRestitution,
   descriptionAr: t.descriptionAr,
   ambientEffect: t.ambientEffect as TableItem['ambientEffect'],
-  geometry: DEFAULT_TABLE_GEOMETRY,
+  geometry: t.walls ? buildTableGeometryFromWalls(t.walls) : DEFAULT_TABLE_GEOMETRY,
 }));
