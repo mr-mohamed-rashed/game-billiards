@@ -338,7 +338,21 @@ export function stepPhysics({
       const speed = Math.hypot(ball.vx, ball.vy);
       if (speed > 0.15) anyMoving = true;
 
-      // Straight Rubber Cushion Rails (per-table calibrated inner borders)
+      // Straight Rubber Cushion Rails (per-table calibrated inner borders + Side English)
+      const applyRailSpin = (nx: number, ny: number) => {
+        const eng = ball.spinSide || 0;
+        if (Math.abs(eng) > 0.05 && speed > 1.2) {
+          const vn = Math.max(speed * 0.55, Math.abs(ball.vx * nx + ball.vy * ny));
+          // Clockwise top-down spin (Left / spinX < 0) kicks along tangent (-ny, nx) = shooter's LEFT
+          const tx = -ny;
+          const ty = nx;
+          const kick = -eng * (0.34 * vn + 2.4) * CUSHION_BOUNCE;
+          ball.vx += tx * kick;
+          ball.vy += ty * kick;
+          ball.spinSide = eng * 0.42;
+        }
+      };
+
       if (
         ball.y < bounds.minY &&
         ((ball.x > railSpans.topLeftEndX && ball.x < railSpans.topMidStartX) ||
@@ -346,6 +360,7 @@ export function stepPhysics({
       ) {
         ball.y = bounds.minY;
         ball.vy = Math.abs(ball.vy) * CUSHION_BOUNCE;
+        applyRailSpin(0, 1);
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
       if (
@@ -355,16 +370,19 @@ export function stepPhysics({
       ) {
         ball.y = bounds.maxY;
         ball.vy = -Math.abs(ball.vy) * CUSHION_BOUNCE;
+        applyRailSpin(0, -1);
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
       if (ball.x < bounds.minX && ball.y > railSpans.leftTopEndY && ball.y < railSpans.leftBotStartY) {
         ball.x = bounds.minX;
         ball.vx = Math.abs(ball.vx) * CUSHION_BOUNCE;
+        applyRailSpin(1, 0);
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
       if (ball.x > bounds.maxX && ball.y > railSpans.rightTopEndY && ball.y < railSpans.rightBotStartY) {
         ball.x = bounds.maxX;
         ball.vx = -Math.abs(ball.vx) * CUSHION_BOUNCE;
+        applyRailSpin(-1, 0);
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
 
@@ -473,9 +491,14 @@ export function stepPhysics({
           clampBallToStraightCushions(b1, geom);
           clampBallToStraightCushions(b2, geom);
 
+          const cueBBefore = b1.type === "cue" ? b1 : b2.type === "cue" ? b2 : null;
+          const prevCueVx = cueBBefore ? cueBBefore.vx : 0;
+          const prevCueVy = cueBBefore ? cueBBefore.vy : 0;
+          const prevCueSpeed = cueBBefore ? Math.hypot(prevCueVx, prevCueVy) : 0;
+
           const relVelNormal = (b1.vx - b2.vx) * nx + (b1.vy - b2.vy) * ny;
           if (relVelNormal > 0) {
-            const restitution = 0.94;
+            const restitution = 0.985;
             const impulse = ((1 + restitution) * relVelNormal) / 2;
 
             b1.vx -= impulse * nx;
@@ -502,23 +525,35 @@ export function stepPhysics({
               spinAppliedRef.current = true;
               const cosAim = Math.cos(activeShotAimAngle);
               const sinAim = Math.sin(activeShotAimAngle);
+              // hitDirectness: 1.0 for straight center hit, -> 0 for thin edge graze
+              const impactSpd = Math.max(4, prevCueSpeed);
+              const hitDirectness =
+                prevCueSpeed > 0.2
+                  ? Math.max(0.25, Math.min(1, Math.abs((prevCueVx / prevCueSpeed) * nx + (prevCueVy / prevCueSpeed) * ny)))
+                  : 0.7;
 
+              // Note screen Y axis: spinY < 0 is TOP of ball (Follow), spinY > 0 is BOTTOM of ball (Draw/Screw)
               if (isDeadStopCue && Math.abs(spinY) < 0.25 && Math.abs(spinX) < 0.25) {
-                cueB.vx *= 0.25;
-                cueB.vy *= 0.25;
-              } else if (spinY < -0.15) {
-                const screwMag = Math.abs(spinY) * 5.6 * cueSpinBonus * screwPerkMult;
+                cueB.vx *= 0.15;
+                cueB.vy *= 0.15;
+              } else if (spinY > 0.15) {
+                // Bottom hit -> Screw / Draw straight backward toward shooter
+                const screwMag = spinY * (0.62 * impactSpd + 3.0) * hitDirectness * cueSpinBonus * screwPerkMult;
                 cueB.vx -= cosAim * screwMag;
                 cueB.vy -= sinAim * screwMag;
-              } else if (spinY > 0.15) {
-                const followMag = spinY * 4.4 * cueSpinBonus;
+              } else if (spinY < -0.15) {
+                // Top hit -> Follow forward behind target ball
+                const followMag = Math.abs(spinY) * (0.58 * impactSpd + 2.8) * hitDirectness * cueSpinBonus;
                 cueB.vx += cosAim * followMag;
                 cueB.vy += sinAim * followMag;
               }
               if (Math.abs(spinX) > 0.15) {
-                const sideMag = spinX * 2.6 * cueSpinBonus;
-                cueB.vx += -sinAim * sideMag;
-                cueB.vy += cosAim * sideMag;
+                // Side spin deflects Left (-sinAim, +cosAim) when spinX < 0, Right when spinX > 0
+                const rightX = -sinAim;
+                const rightY = cosAim;
+                const sideMag = spinX * (0.28 * impactSpd + 2.2) * cueSpinBonus;
+                cueB.vx += rightX * sideMag;
+                cueB.vy += rightY * sideMag;
               }
             }
           }
@@ -546,6 +581,7 @@ export function stepPhysics({
     if (curSpeed <= 0.15) {
       ball.vx = 0;
       ball.vy = 0;
+      ball.spinSide = 0;
     } else {
       anyMoving = true;
       // Smooth anti-strobing 3D sphere roll rotation for both pole (p) and stripe axis (s)

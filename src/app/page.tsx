@@ -482,6 +482,7 @@ function CueMasterApp() {
         proceduralTableCache: proceduralTableCacheRef.current,
       });
 
+      const isHumanTurn = turnRef.current === "human" || isPracticeRef.current;
       const anyMoving = stepPhysics({
         balls: ballsRef.current,
         dtNorm,
@@ -491,8 +492,8 @@ function CueMasterApp() {
         soundEnabled: soundEnabledRef.current,
         activeShotCalledPocketId: activeShotCalledPocketRef.current,
         activeShotAimAngle: activeShotAimAngleRef.current,
-        spinX: spinXRef.current,
-        spinY: spinYRef.current,
+        spinX: isHumanTurn ? spinXRef.current : 0,
+        spinY: isHumanTurn ? spinYRef.current : 0,
         spinAppliedRef: spinAppliedInCurrentShotRef,
         firstBallHitRef: firstBallHitInShotRef,
         callbacks: {
@@ -829,6 +830,8 @@ function CueMasterApp() {
     if (soundEnabledRef.current) playCueStrike(shotPower);
 
     const curCue = ALL_CUES.find((c) => c.id === selectedCueRef.current) || ALL_CUES[0];
+    const cueSpinFactor = 0.75 + (curCue.stats.spin / 10) * 0.55;
+    cueBall.spinSide = Math.abs(spinXRef.current) > 0.12 ? spinXRef.current * cueSpinFactor : 0;
     const speed = (shotPower / 100) * 36 * getCueForceMultiplier(curCue);
     cueBall.vx = Math.cos(aimAngleRef.current) * speed;
     cueBall.vy = Math.sin(aimAngleRef.current) * speed;
@@ -908,6 +911,7 @@ function CueMasterApp() {
             isShootingRef.current = true;
             setIsShooting(true);
             if (soundEnabledRef.current) playCueStrike(targetPower);
+            cueBall.spinSide = 0;
             cueBall.vx = Math.cos(plan.angle) * plan.speed;
             cueBall.vy = Math.sin(plan.angle) * plan.speed;
           }, 180);

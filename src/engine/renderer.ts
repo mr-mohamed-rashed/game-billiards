@@ -500,13 +500,23 @@ export function renderTableScene({
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Bank-shot cushion reflection preview for precision/legendary cues
-    if (!hitBall && cushionHit && BANK_PERK_CUES.has(activeCueObj.id)) {
-      const rx = cushionHit.nx !== 0 ? -cosA : cosA;
-      const ry = cushionHit.ny !== 0 ? -sinA : sinA;
-      const bankLen = activeCueObj.id === "cue_cosmic_nebula" ? 180 : 125;
-      ctx.strokeStyle = activeCueObj.glowColor;
-      ctx.globalAlpha = 0.72;
+    // Bank-shot cushion reflection preview (includes Left/Right English deflection)
+    if (!hitBall && cushionHit && (BANK_PERK_CUES.has(activeCueObj.id) || Math.abs(spinX) > 0.15)) {
+      let rx = cushionHit.nx !== 0 ? -cosA : cosA;
+      let ry = cushionHit.ny !== 0 ? -sinA : sinA;
+      if (Math.abs(spinX) > 0.15) {
+        const engScale = -spinX * 0.48;
+        const tx = -cushionHit.ny;
+        const ty = cushionHit.nx;
+        rx += tx * engScale;
+        ry += ty * engScale;
+        const rLen = Math.hypot(rx, ry) || 1;
+        rx /= rLen;
+        ry /= rLen;
+      }
+      const bankLen = activeCueObj.id === "cue_cosmic_nebula" ? 180 : 115;
+      ctx.strokeStyle = Math.abs(spinX) > 0.15 ? "rgba(56, 189, 248, 0.85)" : activeCueObj.glowColor;
+      ctx.globalAlpha = 0.75;
       ctx.setLineDash([3, 4]);
       ctx.lineWidth = 1.6;
       ctx.beginPath();
@@ -543,14 +553,19 @@ export function renderTableScene({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Cue ball post-collision path (Tangent line + spin bias)
+      // Cue ball post-collision path (Tangent stun + Follow/Draw + Left/Right spin bias)
       const dot = cosA * targetDeflectDir.dx + sinA * targetDeflectDir.dy;
       let cueDefX = cosA - dot * targetDeflectDir.dx;
       let cueDefY = sinA - dot * targetDeflectDir.dy;
-      // Add subtle topspin/backspin curve indicator along aim vector
-      if (Math.abs(spinY) > 0.15) {
-        cueDefX += cosA * spinY * 0.45;
-        cueDefY += sinA * spinY * 0.45;
+      // Top (-spinY > 0) pulls forward, Bottom (-spinY < 0) pulls backward
+      const topFollow = -spinY;
+      if (Math.abs(topFollow) > 0.15) {
+        cueDefX += cosA * topFollow * 0.72 * Math.max(0.35, dot);
+        cueDefY += sinA * topFollow * 0.72 * Math.max(0.35, dot);
+      }
+      if (Math.abs(spinX) > 0.15) {
+        cueDefX += -sinA * spinX * 0.45;
+        cueDefY += cosA * spinX * 0.45;
       }
       const cueDefLen = Math.hypot(cueDefX, cueDefY);
       if (cueDefLen > 0.08) {

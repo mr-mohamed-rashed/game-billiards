@@ -22,6 +22,8 @@ export interface Ball {
   sx: number;
   sy: number;
   sz: number;
+  // Active Left/Right side English stored for cushion rebounds (- left, + right)
+  spinSide?: number;
 }
 
 export interface Pocket {

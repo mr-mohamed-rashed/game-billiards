@@ -215,8 +215,13 @@ export function TableHUD({
                 />
               </div>
               <div className="flex items-center justify-between w-full gap-1">
-                <span className="text-[9px] font-bold text-slate-300">
-                  {spinY < -0.2 ? "اسكروه 🔻" : spinY > 0.2 ? "توب 🔺" : "مركز"}
+                <span className="text-[9px] font-bold text-slate-300 truncate">
+                  {[
+                    spinY < -0.2 ? "توب 🔺" : spinY > 0.2 ? "اسكرو 🔻" : "",
+                    spinX < -0.2 ? "شمال ◀" : spinX > 0.2 ? "يمين ▶" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" + ") || "مركز (استوب)"}
                 </span>
                 <button
                   type="button"
