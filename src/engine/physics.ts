@@ -309,11 +309,12 @@ export function stepPhysics({
   const geom = tableCfg.geometry;
   const { bounds, railSpans, pockets, jaws } = geom;
 
-  const FRICTION = tableCfg.friction;
-  const subFriction = Math.pow(FRICTION, 1 / SUB_STEPS);
+  // True Coulomb rolling deceleration + light high-speed cloth slide (varies per table cloth)
+  const clothFactor = Math.max(0.55, (1 - tableCfg.friction) / 0.015);
   const effectiveScale = dtNorm * timeScale;
-  const stepFriction = Math.pow(subFriction, effectiveScale);
   const invSub = effectiveScale / SUB_STEPS;
+  const slideDragSub = Math.pow(1 - 0.004 * clothFactor, invSub);
+  const rollingDecelSub = 0.095 * clothFactor * invSub;
   const CUSHION_BOUNCE = tableCfg.bounceRestitution;
   const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
 
@@ -332,11 +333,16 @@ export function stepPhysics({
 
       ball.x += ball.vx * invSub;
       ball.y += ball.vy * invSub;
-      ball.vx *= stepFriction;
-      ball.vy *= stepFriction;
+
+      const rawSpeed = Math.hypot(ball.vx, ball.vy);
+      if (rawSpeed > 0.0001) {
+        const nextSpeed = Math.max(0, rawSpeed * slideDragSub - rollingDecelSub);
+        const ratio = nextSpeed / rawSpeed;
+        ball.vx *= ratio;
+        ball.vy *= ratio;
+      }
 
       const speed = Math.hypot(ball.vx, ball.vy);
-      if (speed > 0.15) anyMoving = true;
 
       // Straight Rubber Cushion Rails (per-table calibrated inner borders + Side English)
       const applyRailSpin = (nx: number, ny: number) => {
@@ -562,8 +568,8 @@ export function stepPhysics({
     }
   }
 
-  // Update 3D Sphere Rolling Rotation & Clean Stop Threshold
-  const lowSpeedDamp = Math.pow(0.93, dtNorm);
+  // Update 3D Sphere Rolling Rotation & Natural Gradual Rest (no abrupt brake threshold)
+  anyMoving = false;
   for (let i = 0; i < ballCount; i++) {
     const ball = balls[i];
     if (ball.isPotted) continue;
@@ -573,12 +579,7 @@ export function stepPhysics({
       ball.vy = (ball.vy / curSpeed) * MAX_SPEED;
       curSpeed = MAX_SPEED;
     }
-    if (curSpeed > 0.15 && curSpeed < 0.85) {
-      ball.vx *= lowSpeedDamp;
-      ball.vy *= lowSpeedDamp;
-      curSpeed = Math.hypot(ball.vx, ball.vy);
-    }
-    if (curSpeed <= 0.15) {
+    if (curSpeed <= 0.04) {
       ball.vx = 0;
       ball.vy = 0;
       ball.spinSide = 0;
