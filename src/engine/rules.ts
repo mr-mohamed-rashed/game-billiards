@@ -1,4 +1,4 @@
-import { Ball, BallGroup, GameMode } from "@/types/billiards";
+import { Ball, BallGroup, DEFAULT_TABLE_GEOMETRY, GameMode, TableGeometry } from "@/types/billiards";
 import { findFreeCueBallPos, placeCueBallSafely } from "@/engine/physics";
 import { playFoulBuzzer } from "@/utils/audio";
 
@@ -6,6 +6,7 @@ export interface ShotOutcomeContext {
   mode: GameMode;
   isPractice: boolean;
   soundEnabled: boolean;
+  tableGeom?: TableGeometry;
   balls: Ball[];
   pottedList: { ball: Ball; pocketId: number }[];
   cueScratched: boolean;
@@ -30,6 +31,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     mode,
     isPractice,
     soundEnabled,
+    tableGeom = DEFAULT_TABLE_GEOMETRY,
     balls,
     pottedList,
     cueScratched,
@@ -134,19 +136,19 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       if (!isPractice) {
         const nextTurn = activeShooter === "human" ? "bot" : "human";
         if (nextTurn === "human") {
-          const freePos = findFreeCueBallPos(balls);
+          const freePos = findFreeCueBallPos(balls, tableGeom);
           onTurnChange("human");
           onBallInHand(freePos);
           onMessage(`✋ فاول على الخصم (${foulReason}): اسحب الكرة البيضاء وضعها!`);
         } else {
           // Ensure cue ball is safely placed on table immediately before Bot shoots
-          placeCueBallSafely(balls);
+          placeCueBallSafely(balls, tableGeom);
           onBallInHand(null);
           onTurnChange("bot");
           onMessage(`⚠️ فاول عليك (${foulReason}): دور الخصم.`);
         }
       } else {
-        const freePos = findFreeCueBallPos(balls);
+        const freePos = findFreeCueBallPos(balls, tableGeom);
         onBallInHand(freePos);
         onMessage(`✋ فاول (${foulReason}): ضع الكرة البيضاء!`);
       }
@@ -237,7 +239,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
   } else {
     // Snooker mode
     if (cueScratched) {
-      placeCueBallSafely(balls);
+      placeCueBallSafely(balls, tableGeom);
       if (!isPractice) {
         onTurnChange(activeShooter === "human" ? "bot" : "human");
       }

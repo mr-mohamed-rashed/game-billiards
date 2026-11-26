@@ -5,9 +5,9 @@ import {
   BallGroup,
   CUSHION,
   GameMode,
-  POCKETS,
   TABLE_HEIGHT,
   TABLE_WIDTH,
+  TableGeometry,
 } from "@/types/billiards";
 
 export function createBallGlossCanvas(): HTMLCanvasElement {
@@ -52,24 +52,25 @@ function rayToCushion(
   oy: number,
   dx: number,
   dy: number,
-  maxDist: number
+  maxDist: number,
+  bounds: TableGeometry["bounds"]
 ): { dist: number; nx: number; ny: number } {
   let best = maxDist;
   let nx = 0;
   let ny = 0;
 
   if (dx < -0.0001) {
-    const t = (82 - ox) / dx;
+    const t = (bounds.minX - ox) / dx;
     if (t > 0 && t < best) { best = t; nx = 1; ny = 0; }
   } else if (dx > 0.0001) {
-    const t = (823 - ox) / dx;
+    const t = (bounds.maxX - ox) / dx;
     if (t > 0 && t < best) { best = t; nx = -1; ny = 0; }
   }
   if (dy < -0.0001) {
-    const t = (64 - oy) / dy;
+    const t = (bounds.minY - oy) / dy;
     if (t > 0 && t < best) { best = t; nx = 0; ny = 1; }
   } else if (dy > 0.0001) {
-    const t = (379 - oy) / dy;
+    const t = (bounds.maxY - oy) / dy;
     if (t > 0 && t < best) { best = t; nx = 0; ny = -1; }
   }
 
@@ -85,6 +86,7 @@ export interface RenderSceneParams {
   turn: "human" | "bot";
   isPractice: boolean;
   isShooting: boolean;
+  isBotAiming?: boolean;
   isBallInHand: boolean;
   ballInHandHoverPos: { x: number; y: number } | null;
   calledPocketId: number | null;
@@ -109,6 +111,7 @@ export function renderTableScene({
   turn,
   isPractice,
   isShooting,
+  isBotAiming = false,
   isBallInHand,
   ballInHandHoverPos,
   calledPocketId,
@@ -159,18 +162,20 @@ export function renderTableScene({
     ctx.drawImage(cachedBg, 0, 0);
   }
 
+  const { bounds, pockets } = tableCfg.geometry;
+
   // Snooker Baulk Line & "D" Zone
   if (mode === "snooker") {
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 2;
-    const baulkX = 82 + 150;
+    const baulkX = bounds.minX + (bounds.maxX - bounds.minX) * 0.22;
     ctx.beginPath();
-    ctx.moveTo(baulkX, 64);
-    ctx.lineTo(baulkX, 379);
+    ctx.moveTo(baulkX, bounds.minY - BALL_RADIUS);
+    ctx.lineTo(baulkX, bounds.maxY + BALL_RADIUS);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(baulkX, TABLE_HEIGHT / 2, 60, -Math.PI / 2, Math.PI / 2, true);
+    ctx.arc(baulkX, (bounds.minY + bounds.maxY) / 2, 60, -Math.PI / 2, Math.PI / 2, true);
     ctx.stroke();
   }
 
@@ -184,37 +189,37 @@ export function renderTableScene({
   const humanOnEightBall =
     mode === "8-ball" && humanGroup !== "unassigned" && remainingHumanGroupBalls.length === 0;
 
-  // 2. Pocket Target Call Highlight (Required on 8-ball, optional on other shots)
+  // 2. Pocket Target Call Highlight (Ring aligned flush to exact outer black pocket rim)
   if (calledPocketId !== null) {
-    const p = POCKETS[calledPocketId];
+    const p = pockets[calledPocketId];
     if (p) {
       ctx.strokeStyle = "#eab308";
       ctx.lineWidth = 2.5;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 16, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.fillStyle = "rgba(234, 179, 8, 0.22)";
+      ctx.fillStyle = "rgba(234, 179, 8, 0.16)";
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, Math.max(8, p.r - 2), 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = "#eab308";
       ctx.font = "bold 10px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? 28 : -22));
+      ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? p.r + 12 : -(p.r + 6)));
     }
   } else if (humanOnEightBall && (turn === "human" || isPractice) && !isShooting) {
     // Prompt visual rings on all 6 pockets so player sees where to tap for the 8-ball
-    ctx.strokeStyle = "rgba(250, 204, 21, 0.65)";
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.72)";
     ctx.lineWidth = 2;
-    ctx.setLineDash([3, 3]);
-    for (let i = 0; i < POCKETS.length; i++) {
-      const p = POCKETS[i];
+    ctx.setLineDash([4, 4]);
+    for (let i = 0; i < pockets.length; i++) {
+      const p = pockets[i];
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 16, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.setLineDash([]);
@@ -400,14 +405,16 @@ export function renderTableScene({
 
   // 5. Aim Line Raycasting + Cue Ball Post-Collision Path + Bank Preview + Cue Stick
   const cueBall = balls[0];
-  if ((turn === "human" || isPractice) && !isShooting && !isBallInHand && cueBall && !cueBall.isPotted) {
+  const canShowAim =
+    !isShooting && !isBallInHand && cueBall && !cueBall.isPotted && (turn === "human" || isPractice || isBotAiming);
+  if (canShowAim) {
     const cosA = Math.cos(aimAngle);
     const sinA = Math.sin(aimAngle);
     const collisionRadius = BALL_RADIUS * 2;
 
     const baseDist = aimAssistLong ? 440 : 270;
     const cueBonusDist = (activeCueObj.stats.aim / 10) * 320;
-    const maxRayDist = baseDist + cueBonusDist;
+    const maxRayDist = isBotAiming ? 260 : baseDist + cueBonusDist;
     let closestHitDist = maxRayDist;
 
     let hitBall: Ball | null = null;
@@ -446,7 +453,7 @@ export function renderTableScene({
     let isAimedTargetLegal = true;
     let warningText = "";
 
-    if (hitBall && mode === "8-ball") {
+    if (hitBall && mode === "8-ball" && !isBotAiming) {
       if (humanGroup === "unassigned") {
         if (hitBall.number === 8) {
           isAimedTargetLegal = false;
@@ -469,7 +476,7 @@ export function renderTableScene({
     let endAimY = cueBall.y + sinA * closestHitDist;
     let cushionHit: { dist: number; nx: number; ny: number } | null = null;
     if (!hitBall) {
-      const cHit = rayToCushion(cueBall.x, cueBall.y, cosA, sinA, closestHitDist);
+      const cHit = rayToCushion(cueBall.x, cueBall.y, cosA, sinA, closestHitDist, bounds);
       if (cHit.dist < closestHitDist && (cHit.nx !== 0 || cHit.ny !== 0)) {
         closestHitDist = cHit.dist;
         endAimX = cueBall.x + cosA * closestHitDist;

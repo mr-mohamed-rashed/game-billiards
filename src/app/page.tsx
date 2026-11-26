@@ -146,6 +146,7 @@ function CueMasterApp() {
   const activeShotAimAngleRef = useRef(0);
   const spinAppliedInCurrentShotRef = useRef(false);
   const isShootingRef = useRef(false);
+  const botAimVisibleRef = useRef(false);
   const isBallInHandRef = useRef(false);
   const ballInHandHoverPosRef = useRef<{ x: number; y: number } | null>(null);
   const turnRef = useRef<"human" | "bot">("human");
@@ -283,19 +284,23 @@ function CueMasterApp() {
     try { localStorage.setItem("cuemaster_gems", val.toString()); } catch {}
   };
 
+  const getActiveGeom = () =>
+    (ALL_TABLES.find((t) => t.id === selectedTableRef.current) || ALL_TABLES[0]).geometry;
+
   const handleTurnTimeout = () => {
     if (soundEnabledRef.current) playFoulBuzzer();
+    const activeGeom = getActiveGeom();
     if (!isPracticeRef.current) {
       const nextTurn = turnRef.current === "human" ? "bot" : "human";
       if (nextTurn === "human") {
-        ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current);
+        ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom);
         isBallInHandRef.current = true;
         setIsBallInHand(true);
         turnRef.current = "human";
         setTurn("human");
         setTurnMessage("⏱️ انتهى وقت الخصم! الفاول لصالحك، اسحب الكرة البيضاء 🧤");
       } else {
-        placeCueBallSafely(ballsRef.current);
+        placeCueBallSafely(ballsRef.current, activeGeom);
         isBallInHandRef.current = false;
         setIsBallInHand(false);
         turnRef.current = "bot";
@@ -303,7 +308,7 @@ function CueMasterApp() {
         setTurnMessage("⚠️ انتهى وقتك! الكرة في يد الخصم.");
       }
     } else {
-      ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current);
+      ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom);
       isBallInHandRef.current = true;
       setIsBallInHand(true);
       setTurnMessage("⏱️ انتهى وقت التصويب في التدريب!");
@@ -329,12 +334,13 @@ function CueMasterApp() {
   }, [currentView, turn, isShooting, gameOver, isPractice, turnTotalTime]);
 
   const initBalls = (currentMode: GameMode) => {
-    ballsRef.current = initBallsRack(currentMode);
+    ballsRef.current = initBallsRack(currentMode, getActiveGeom());
     humanGroupRef.current = "unassigned";
     botGroupRef.current = "unassigned";
     turnRef.current = "human";
     isBallInHandRef.current = false;
     isShootingRef.current = false;
+    botAimVisibleRef.current = false;
     ballInHandHoverPosRef.current = null;
     calledPocketIdRef.current = null;
     powerRef.current = 0;
@@ -459,6 +465,7 @@ function CueMasterApp() {
         turn: turnRef.current,
         isPractice: isPracticeRef.current,
         isShooting: isShootingRef.current,
+        isBotAiming: botAimVisibleRef.current,
         isBallInHand: isBallInHandRef.current,
         ballInHandHoverPos: ballInHandHoverPosRef.current,
         calledPocketId: calledPocketIdRef.current,
@@ -550,6 +557,7 @@ function CueMasterApp() {
           mode: modeRef.current,
           isPractice: isPracticeRef.current,
           soundEnabled: soundEnabledRef.current,
+          tableGeom: tableCfg.geometry,
           balls: ballsRef.current,
           pottedList,
           cueScratched,
@@ -611,7 +619,7 @@ function CueMasterApp() {
   };
 
   const tryPlaceBallInHand = (x: number, y: number) => {
-    const clamped = clampBallInHandPos(x, y);
+    const clamped = clampBallInHandPos(x, y, getActiveGeom());
     const isOverlapping = ballsRef.current
       .slice(1)
       .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < BALL_RADIUS * 2.2);
@@ -641,7 +649,7 @@ function CueMasterApp() {
 
     if (isBallInHandRef.current) {
       if (isDraggingBallInHandRef.current || e.pointerType === "mouse") {
-        ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y);
+        ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom());
       }
       return;
     }
@@ -662,7 +670,9 @@ function CueMasterApp() {
     const coords = getCanvasCoords(e.clientX, e.clientY);
     if (!coords) return;
 
-    const clickedPocket = POCKETS.find((p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 38);
+    const clickedPocket = getActiveGeom().pockets.find(
+      (p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 38
+    );
     if (clickedPocket && !isBallInHandRef.current) {
       calledPocketIdRef.current = clickedPocket.id;
       setCalledPocketId(clickedPocket.id);
@@ -672,7 +682,7 @@ function CueMasterApp() {
 
     if (isBallInHandRef.current) {
       isDraggingBallInHandRef.current = true;
-      ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y);
+      ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom());
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
       return;
     }
@@ -691,7 +701,7 @@ function CueMasterApp() {
     if (isBallInHandRef.current && isDraggingBallInHandRef.current) {
       isDraggingBallInHandRef.current = false;
       const coords = getCanvasCoords(e.clientX, e.clientY);
-      const target = coords ? clampBallInHandPos(coords.x, coords.y) : ballInHandHoverPosRef.current;
+      const target = coords ? clampBallInHandPos(coords.x, coords.y, getActiveGeom()) : ballInHandHoverPosRef.current;
       if (target) tryPlaceBallInHand(target.x, target.y);
     }
     isAimDraggingRef.current = false;
@@ -823,35 +833,96 @@ function CueMasterApp() {
     cueBall.vy = Math.sin(aimAngleRef.current) * speed;
   };
 
-  // Bot AI Turn Execution
+  // Bot AI Turn Execution (Natural pause -> visible cue aiming -> smooth pull-back -> strike)
   useEffect(() => {
     if (currentView !== "table") return;
     if (turn === "bot" && !isShooting && !gameOver && !isPractice && !isBallInHand) {
-      const botTimer = setTimeout(() => {
+      let cancelled = false;
+      let aimRaf: number | null = null;
+      let strikeTimer: ReturnType<typeof setTimeout> | null = null;
+
+      setTurnMessage("🤖 الخصم يفحص الطاولة...");
+
+      const thinkTimer = setTimeout(() => {
+        if (cancelled) return;
         const cueBall = ballsRef.current[0];
         if (!cueBall) return;
-        if (cueBall.isPotted) placeCueBallSafely(ballsRef.current);
+        const activeGeom = getActiveGeom();
+        if (cueBall.isPotted) placeCueBallSafely(ballsRef.current, activeGeom);
 
-        const plan = computeBotShot(ballsRef.current, botGroupRef.current, modeRef.current);
+        const plan = computeBotShot(ballsRef.current, botGroupRef.current, modeRef.current, activeGeom);
         if (!plan) return;
 
         calledPocketIdRef.current = plan.pocketId;
         setCalledPocketId(plan.pocketId);
         activeShotCalledPocketRef.current = plan.pocketId;
-        aimAngleRef.current = plan.angle;
-        activeShotAimAngleRef.current = plan.angle;
-        spinAppliedInCurrentShotRef.current = false;
-        shotStartPosRef.current = { x: cueBall.x, y: cueBall.y };
-        cinematicTriggeredThisShotRef.current = false;
+        setTurnMessage("🤖 الخصم يوجّه العصا نحو الهدف...");
 
-        isShootingRef.current = true;
-        setIsShooting(true);
-        if (soundEnabledRef.current) playCueStrike(75);
-        cueBall.vx = Math.cos(plan.angle) * plan.speed;
-        cueBall.vy = Math.sin(plan.angle) * plan.speed;
-      }, 500);
+        const startAngle = aimAngleRef.current;
+        // Shortest wrapped delta angle
+        let deltaAngle = ((plan.angle - startAngle + Math.PI) % (Math.PI * 2)) - Math.PI;
+        if (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
 
-      return () => clearTimeout(botTimer);
+        const targetPower = Math.min(95, Math.max(35, Math.round((plan.speed / 36) * 100)));
+        botAimVisibleRef.current = true;
+        powerRef.current = 0;
+
+        const aimStart = performance.now();
+        const AIM_SWEEP_MS = 650;
+        const PULL_BACK_MS = 380;
+
+        const animateBotAim = (now: number) => {
+          if (cancelled) return;
+          const elapsed = now - aimStart;
+
+          if (elapsed < AIM_SWEEP_MS) {
+            const t = elapsed / AIM_SWEEP_MS;
+            const eased = 1 - Math.pow(1 - t, 3);
+            aimAngleRef.current = startAngle + deltaAngle * eased;
+            powerRef.current = 0;
+            aimRaf = requestAnimationFrame(animateBotAim);
+            return;
+          }
+
+          aimAngleRef.current = plan.angle;
+          const pullElapsed = elapsed - AIM_SWEEP_MS;
+          if (pullElapsed < PULL_BACK_MS) {
+            const pt = pullElapsed / PULL_BACK_MS;
+            const easedPull = 1 - Math.pow(1 - pt, 2);
+            powerRef.current = Math.round(targetPower * easedPull);
+            aimRaf = requestAnimationFrame(animateBotAim);
+            return;
+          }
+
+          powerRef.current = targetPower;
+          strikeTimer = setTimeout(() => {
+            if (cancelled) return;
+            botAimVisibleRef.current = false;
+            powerRef.current = 0;
+            activeShotAimAngleRef.current = plan.angle;
+            spinAppliedInCurrentShotRef.current = false;
+            shotStartPosRef.current = { x: cueBall.x, y: cueBall.y };
+            cinematicTriggeredThisShotRef.current = false;
+
+            isShootingRef.current = true;
+            setIsShooting(true);
+            if (soundEnabledRef.current) playCueStrike(targetPower);
+            cueBall.vx = Math.cos(plan.angle) * plan.speed;
+            cueBall.vy = Math.sin(plan.angle) * plan.speed;
+          }, 180);
+        };
+
+        aimRaf = requestAnimationFrame(animateBotAim);
+      }, 480);
+
+      return () => {
+        cancelled = true;
+        botAimVisibleRef.current = false;
+        powerRef.current = 0;
+        clearTimeout(thinkTimer);
+        if (strikeTimer) clearTimeout(strikeTimer);
+        if (aimRaf) cancelAnimationFrame(aimRaf);
+      };
     }
   }, [currentView, turn, isShooting, gameOver, isPractice, isBallInHand, botGroup]);
 

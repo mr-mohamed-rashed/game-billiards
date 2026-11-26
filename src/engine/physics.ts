@@ -4,19 +4,24 @@ import {
   BALL_RADIUS,
   Ball,
   BallGroup,
+  DEFAULT_TABLE_GEOMETRY,
   GameMode,
-  POCKETS,
-  POCKET_JAWS,
   Pocket,
   TABLE_HEIGHT,
   TABLE_WIDTH,
+  TableGeometry,
 } from "@/types/billiards";
 import { playBallClack, playPocketDrop } from "@/utils/audio";
 
-export function clampBallInHandPos(x: number, y: number): { x: number; y: number } {
+export function clampBallInHandPos(
+  x: number,
+  y: number,
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+): { x: number; y: number } {
+  const { bounds } = geom;
   return {
-    x: Math.min(821, Math.max(84, x)),
-    y: Math.min(377, Math.max(66, y)),
+    x: Math.min(bounds.maxX - 2, Math.max(bounds.minX + 2, x)),
+    y: Math.min(bounds.maxY - 2, Math.max(bounds.minY + 2, y)),
   };
 }
 
@@ -41,9 +46,13 @@ function makeBallAxes(seed: number) {
   return { px, py, pz, sx, sy, sz };
 }
 
-export function findFreeCueBallPos(balls: Ball[]): { x: number; y: number } {
-  const headX = 82 + (823 - 82) * 0.25;
-  const centerY = 221.5;
+export function findFreeCueBallPos(
+  balls: Ball[],
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+): { x: number; y: number } {
+  const { bounds } = geom;
+  const headX = bounds.minX + (bounds.maxX - bounds.minX) * 0.25;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
   const minGap = BALL_RADIUS * 2.25;
 
   const isFree = (cx: number, cy: number) =>
@@ -56,15 +65,18 @@ export function findFreeCueBallPos(balls: Ball[]): { x: number; y: number } {
     const steps = 8 + ring * 2;
     for (let k = 0; k < steps; k++) {
       const ang = (k / steps) * Math.PI * 2;
-      const cand = clampBallInHandPos(headX + Math.cos(ang) * rad, centerY + Math.sin(ang) * rad);
+      const cand = clampBallInHandPos(headX + Math.cos(ang) * rad, centerY + Math.sin(ang) * rad, geom);
       if (isFree(cand.x, cand.y)) return cand;
     }
   }
   return { x: headX, y: centerY };
 }
 
-export function placeCueBallSafely(balls: Ball[]): { x: number; y: number } {
-  const pos = findFreeCueBallPos(balls);
+export function placeCueBallSafely(
+  balls: Ball[],
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+): { x: number; y: number } {
+  const pos = findFreeCueBallPos(balls, geom);
   const cb = balls[0];
   if (cb) {
     cb.x = pos.x;
@@ -76,11 +88,15 @@ export function placeCueBallSafely(balls: Ball[]): { x: number; y: number } {
   return pos;
 }
 
-export function initBallsRack(mode: GameMode): Ball[] {
+export function initBallsRack(
+  mode: GameMode,
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+): Ball[] {
   const balls: Ball[] = [];
-  const tableLeft = 82;
-  const tableRight = 823;
-  const centerY = 221.5;
+  const { bounds } = geom;
+  const tableLeft = bounds.minX;
+  const tableRight = bounds.maxX;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
 
   balls.push({
     id: 0,
@@ -158,10 +174,11 @@ export function initBallsRack(mode: GameMode): Ball[] {
       }
     }
 
+    const baulkX = tableLeft + (tableRight - tableLeft) * 0.22;
     const colors = [
-      { color: "#facc15", val: 2, x: 82 + 150, y: centerY + 60 },
-      { color: "#16a34a", val: 3, x: 82 + 150, y: centerY - 60 },
-      { color: "#78350f", val: 4, x: 82 + 150, y: centerY },
+      { color: "#facc15", val: 2, x: baulkX, y: centerY + 60 },
+      { color: "#16a34a", val: 3, x: baulkX, y: centerY - 60 },
+      { color: "#78350f", val: 4, x: baulkX, y: centerY },
       { color: "#2563eb", val: 5, x: TABLE_WIDTH / 2, y: centerY },
       { color: "#ec4899", val: 6, x: apexX - 25, y: centerY },
       { color: "#09090b", val: 7, x: tableRight - 55, y: centerY },
@@ -188,18 +205,21 @@ export function initBallsRack(mode: GameMode): Ball[] {
   return balls;
 }
 
-export function respotBall(ball: Ball, balls: Ball[]) {
-  const tableLeft = 82;
-  const tableRight = 823;
-  const footSpotX = tableLeft + (tableRight - tableLeft) * 0.72;
-  const footSpotY = TABLE_HEIGHT / 2;
+export function respotBall(
+  ball: Ball,
+  balls: Ball[],
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+) {
+  const { bounds } = geom;
+  const footSpotX = bounds.minX + (bounds.maxX - bounds.minX) * 0.72;
+  const footSpotY = (bounds.minY + bounds.maxY) / 2;
 
   let targetX = footSpotX;
   let targetY = footSpotY;
 
   while (balls.some((b) => !b.isPotted && Math.hypot(b.x - targetX, b.y - targetY) < BALL_RADIUS * 2.1)) {
     targetX += BALL_RADIUS * 2.2;
-    if (targetX > tableRight - BALL_RADIUS - 5) {
+    if (targetX > bounds.maxX - 5) {
       targetX = footSpotX;
       targetY += BALL_RADIUS * 2.2;
     }
@@ -244,6 +264,30 @@ export interface StepPhysicsParams {
 const SUB_STEPS = 10;
 const MAX_SPEED = 42;
 
+function clampBallToStraightCushions(b: Ball, geom: TableGeometry) {
+  const { bounds, railSpans } = geom;
+  if (
+    b.y < bounds.minY &&
+    ((b.x > railSpans.topLeftEndX && b.x < railSpans.topMidStartX) ||
+      (b.x > railSpans.topMidEndX && b.x < railSpans.topRightStartX))
+  ) {
+    b.y = bounds.minY;
+  }
+  if (
+    b.y > bounds.maxY &&
+    ((b.x > railSpans.botLeftEndX && b.x < railSpans.botMidStartX) ||
+      (b.x > railSpans.botMidEndX && b.x < railSpans.botRightStartX))
+  ) {
+    b.y = bounds.maxY;
+  }
+  if (b.x < bounds.minX && b.y > railSpans.leftTopEndY && b.y < railSpans.leftBotStartY) {
+    b.x = bounds.minX;
+  }
+  if (b.x > bounds.maxX && b.y > railSpans.rightTopEndY && b.y < railSpans.rightBotStartY) {
+    b.x = bounds.maxX;
+  }
+}
+
 export function stepPhysics({
   balls,
   dtNorm,
@@ -262,6 +306,9 @@ export function stepPhysics({
   const ballCount = balls.length;
   if (ballCount === 0) return false;
 
+  const geom = tableCfg.geometry;
+  const { bounds, railSpans, pockets, jaws } = geom;
+
   const FRICTION = tableCfg.friction;
   const subFriction = Math.pow(FRICTION, 1 / SUB_STEPS);
   const effectiveScale = dtNorm * timeScale;
@@ -271,7 +318,7 @@ export function stepPhysics({
   const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
 
   // Legendary Cue Perks
-  const pocketDropRadius = cueActive.id === "cue_angelic_seraph" ? 25 : 22;
+  const pocketDropBonus = cueActive.id === "cue_angelic_seraph" ? 5 : 2;
   const funnelPullBase = cueActive.id === "cue_angelic_seraph" ? 0.58 : 0.48;
   const screwPerkMult = cueActive.id === "cue_volcanic_magma" ? 1.65 : 1.0;
   const isDeadStopCue = cueActive.id === "cue_nature_druid";
@@ -291,31 +338,39 @@ export function stepPhysics({
       const speed = Math.hypot(ball.vx, ball.vy);
       if (speed > 0.15) anyMoving = true;
 
-      // Straight Rubber Cushion Rails
-      if (ball.y < 64 && ((ball.x > 94 && ball.x < 422) || (ball.x > 478 && ball.x < 806))) {
-        ball.y = 64;
+      // Straight Rubber Cushion Rails (per-table calibrated inner borders)
+      if (
+        ball.y < bounds.minY &&
+        ((ball.x > railSpans.topLeftEndX && ball.x < railSpans.topMidStartX) ||
+          (ball.x > railSpans.topMidEndX && ball.x < railSpans.topRightStartX))
+      ) {
+        ball.y = bounds.minY;
         ball.vy = Math.abs(ball.vy) * CUSHION_BOUNCE;
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
-      if (ball.y > 379 && ((ball.x > 94 && ball.x < 422) || (ball.x > 478 && ball.x < 806))) {
-        ball.y = 379;
+      if (
+        ball.y > bounds.maxY &&
+        ((ball.x > railSpans.botLeftEndX && ball.x < railSpans.botMidStartX) ||
+          (ball.x > railSpans.botMidEndX && ball.x < railSpans.botRightStartX))
+      ) {
+        ball.y = bounds.maxY;
         ball.vy = -Math.abs(ball.vy) * CUSHION_BOUNCE;
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
-      if (ball.x < 82 && ball.y > 86 && ball.y < 364) {
-        ball.x = 82;
+      if (ball.x < bounds.minX && ball.y > railSpans.leftTopEndY && ball.y < railSpans.leftBotStartY) {
+        ball.x = bounds.minX;
         ball.vx = Math.abs(ball.vx) * CUSHION_BOUNCE;
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
-      if (ball.x > 823 && ball.y > 86 && ball.y < 364) {
-        ball.x = 823;
+      if (ball.x > bounds.maxX && ball.y > railSpans.rightTopEndY && ball.y < railSpans.rightBotStartY) {
+        ball.x = bounds.maxX;
         ball.vx = -Math.abs(ball.vx) * CUSHION_BOUNCE;
         if (soundEnabled && speed > 1.0) playBallClack(speed);
       }
 
       // Pocket Jaw Knuckle Bumpers (realistic angled rebounds at pocket corners)
-      for (let ji = 0; ji < POCKET_JAWS.length; ji++) {
-        const jaw = POCKET_JAWS[ji];
+      for (let ji = 0; ji < jaws.length; ji++) {
+        const jaw = jaws[ji];
         const jdx = ball.x - jaw.x;
         const jdy = ball.y - jaw.y;
         const minJawDist = ball.radius + jaw.r;
@@ -336,26 +391,27 @@ export function stepPhysics({
         }
       }
 
-      // Pocket Drop & Funnel Suction
-      for (let pi = 0; pi < POCKETS.length; pi++) {
-        const p = POCKETS[pi];
+      // Pocket Drop & Funnel Suction (aligned to exact pocket rim)
+      for (let pi = 0; pi < pockets.length; pi++) {
+        const p = pockets[pi];
         const dx = p.x - ball.x;
         const dy = p.y - ball.y;
         const dist = Math.hypot(dx, dy);
+        const funnelRadius = p.r + 10;
 
-        if (dist < 30 && dist > 0.5) {
-          const pull = funnelPullBase * (1 - dist / 30) * effectiveScale;
+        if (dist < funnelRadius && dist > 0.5) {
+          const pull = funnelPullBase * (1 - dist / funnelRadius) * effectiveScale;
           ball.vx += (dx / dist) * pull;
           ball.vy += (dy / dist) * pull;
         }
 
         const isTargetOrEight =
           (activeShotCalledPocketId !== null && p.id === activeShotCalledPocketId) || ball.number === 8;
-        if (dist < 36 && dist > 14 && speed > 1.8 && isTargetOrEight && ball.type !== "cue") {
+        if (dist < p.r + 16 && dist > p.r - 4 && speed > 1.8 && isTargetOrEight && ball.type !== "cue") {
           callbacks.onPotentialCinematic(p, ball);
         }
 
-        if (dist < pocketDropRadius) {
+        if (dist < p.r + pocketDropBonus) {
           ball.isPotted = true;
           ball.vx = 0;
           ball.vy = 0;
@@ -365,15 +421,21 @@ export function stepPhysics({
         }
       }
 
-      // Outer table safety catch
-      if (!ball.isPotted && (ball.x < 42 || ball.x > TABLE_WIDTH - 42 || ball.y < 32 || ball.y > TABLE_HEIGHT - 32)) {
-        let nearestP = POCKETS[0];
+      // Outer table safety catch (only catches balls escaping completely outside pocket/frame limits)
+      if (
+        !ball.isPotted &&
+        (ball.x < bounds.minX - 42 ||
+          ball.x > bounds.maxX + 42 ||
+          ball.y < bounds.minY - 34 ||
+          ball.y > bounds.maxY + 34)
+      ) {
+        let nearestP = pockets[0];
         let bestDist = Infinity;
-        for (let pi = 0; pi < POCKETS.length; pi++) {
-          const d = Math.hypot(POCKETS[pi].x - ball.x, POCKETS[pi].y - ball.y);
+        for (let pi = 0; pi < pockets.length; pi++) {
+          const d = Math.hypot(pockets[pi].x - ball.x, pockets[pi].y - ball.y);
           if (d < bestDist) {
             bestDist = d;
-            nearestP = POCKETS[pi];
+            nearestP = pockets[pi];
           }
         }
         ball.isPotted = true;
@@ -408,15 +470,8 @@ export function stepPhysics({
           b2.x += nx * overlap;
           b2.y += ny * overlap;
 
-          if (b1.y < 64 && ((b1.x > 94 && b1.x < 422) || (b1.x > 478 && b1.x < 806))) b1.y = 64;
-          if (b1.y > 379 && ((b1.x > 94 && b1.x < 422) || (b1.x > 478 && b1.x < 806))) b1.y = 379;
-          if (b1.x < 82 && b1.y > 86 && b1.y < 364) b1.x = 82;
-          if (b1.x > 823 && b1.y > 86 && b1.y < 364) b1.x = 823;
-
-          if (b2.y < 64 && ((b2.x > 94 && b2.x < 422) || (b2.x > 478 && b2.x < 806))) b2.y = 64;
-          if (b2.y > 379 && ((b2.x > 94 && b2.x < 422) || (b2.x > 478 && b2.x < 806))) b2.y = 379;
-          if (b2.x < 82 && b2.y > 86 && b2.y < 364) b2.x = 82;
-          if (b2.x > 823 && b2.y > 86 && b2.y < 364) b2.x = 823;
+          clampBallToStraightCushions(b1, geom);
+          clampBallToStraightCushions(b2, geom);
 
           const relVelNormal = (b1.vx - b2.vx) * nx + (b1.vy - b2.vy) * ny;
           if (relVelNormal > 0) {
@@ -563,9 +618,15 @@ export interface BotShotPlan {
 }
 
 // Smart Cut-Shot / Ghost-Ball Bot AI with Line-of-Sight Obstruction Check
-export function computeBotShot(balls: Ball[], botGroup: BallGroup, mode: GameMode): BotShotPlan | null {
+export function computeBotShot(
+  balls: Ball[],
+  botGroup: BallGroup,
+  mode: GameMode,
+  geom: TableGeometry = DEFAULT_TABLE_GEOMETRY
+): BotShotPlan | null {
   const cueBall = balls[0];
   if (!cueBall || cueBall.isPotted) return null;
+  const { pockets, bounds } = geom;
 
   const candidateBalls = balls.filter((b) => {
     if (b.isPotted || b.type === "cue") return false;
@@ -588,8 +649,8 @@ export function computeBotShot(balls: Ball[], botGroup: BallGroup, mode: GameMod
     const target = targets[ti];
     const ignore = new Set<number>([0, target.id]);
 
-    for (let pi = 0; pi < POCKETS.length; pi++) {
-      const p = POCKETS[pi];
+    for (let pi = 0; pi < pockets.length; pi++) {
+      const p = pockets[pi];
       const toPx = p.x - target.x;
       const toPy = p.y - target.y;
       const distBP = Math.hypot(toPx, toPy);
@@ -601,7 +662,7 @@ export function computeBotShot(balls: Ball[], botGroup: BallGroup, mode: GameMod
       // Ghost ball impact point
       const gx = target.x - uBPx * (BALL_RADIUS * 2);
       const gy = target.y - uBPy * (BALL_RADIUS * 2);
-      if (gx < 72 || gx > 833 || gy < 54 || gy > 389) continue;
+      if (gx < bounds.minX - 6 || gx > bounds.maxX + 6 || gy < bounds.minY - 6 || gy > bounds.maxY + 6) continue;
 
       const toGx = gx - cueBall.x;
       const toGy = gy - cueBall.y;
@@ -640,7 +701,7 @@ export function computeBotShot(balls: Ball[], botGroup: BallGroup, mode: GameMod
       const d2 = Math.hypot(curr.x - cueBall.x, curr.y - cueBall.y);
       return d1 < d2 ? prev : curr;
     });
-    const bestPocket = POCKETS.reduce((prev, curr) => {
+    const bestPocket = pockets.reduce((prev, curr) => {
       const d1 = Math.hypot(prev.x - closest.x, prev.y - closest.y);
       const d2 = Math.hypot(curr.x - closest.x, curr.y - closest.y);
       return d1 < d2 ? prev : curr;
