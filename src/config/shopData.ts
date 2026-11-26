@@ -1,4 +1,4 @@
-import { TableGeometry, buildTableGeometry } from "@/types/billiards";
+import { DEFAULT_TABLE_GEOMETRY, TableGeometry } from "@/types/billiards";
 
 export interface CueStats {
   force: number;  // 1 to 10
@@ -341,17 +341,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.85,
     descriptionAr: 'طاولة خشب الماهوجني المعتق الكلاسيكية مع قماش صوف ميرينو الأخضر وزوايا النحاس المعتمدة دولياً.',
     ambientEffect: 'none',
-    geometry: buildTableGeometry({
-      walls: { left: 79, right: 825, top: 57, bottom: 392 },
-      pockets: {
-        tl: [64, 47, 21],
-        tm: [452, 34, 19],
-        tr: [840, 47, 21],
-        bl: [64, 398, 21],
-        bm: [452, 412, 19],
-        br: [840, 398, 21],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 2. Enchanted Forest
   {
@@ -367,17 +357,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.86,
     descriptionAr: 'إطارات من أغصان الشجر الأزلية وأوراق خضراء حية تمنح الطاولة روح الطبيعة وسحر الغابات الخضراء.',
     ambientEffect: 'forest',
-    geometry: buildTableGeometry({
-      walls: { left: 98, right: 805, top: 68, bottom: 376 },
-      pockets: {
-        tl: [81, 59, 18],
-        tm: [450, 48, 18],
-        tr: [822, 59, 18],
-        bl: [81, 380, 18],
-        bm: [450, 390, 18],
-        br: [822, 380, 18],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 3. Glacial Frost Ice
   {
@@ -393,17 +373,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.88,
     descriptionAr: 'منحوتة من صقيع القطب الشمالي مع بلورات ثلجية متجمدة وانزلاق فائق النعومة للكرات.',
     ambientEffect: 'frost',
-    geometry: buildTableGeometry({
-      walls: { left: 80, right: 826, top: 56, bottom: 392 },
-      pockets: {
-        tl: [68, 52, 20],
-        tm: [452, 41, 20],
-        tr: [838, 52, 20],
-        bl: [68, 396, 20],
-        bm: [452, 407, 20],
-        br: [838, 396, 20],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 4. Future Cyber Tech
   {
@@ -419,17 +389,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.88,
     descriptionAr: 'هيكل معدني مستقبلي بدوائر إلكترونية متوهجة بإضاءات النيون السيان والبنفسجي الرقمية فائقة الحساب.',
     ambientEffect: 'cyber',
-    geometry: buildTableGeometry({
-      walls: { left: 97, right: 808, top: 64, bottom: 385 },
-      pockets: {
-        tl: [70, 54, 20],
-        tm: [451, 45, 20],
-        tr: [833, 54, 20],
-        bl: [70, 395, 20],
-        bm: [451, 404, 20],
-        br: [833, 395, 20],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 5. Industrial Steampunk Steel
   {
@@ -445,17 +405,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.87,
     descriptionAr: 'صفائح صلب مقواة ومسامير برشام نحاسية مع تروس ستيمبانك وجيوب شبكية صناعية عتيدة.',
     ambientEffect: 'industrial',
-    geometry: buildTableGeometry({
-      walls: { left: 87, right: 813, top: 64, bottom: 386 },
-      pockets: {
-        tl: [70, 53, 20],
-        tm: [448, 45, 20],
-        tr: [826, 53, 20],
-        bl: [70, 398, 20],
-        bm: [448, 405, 20],
-        br: [826, 398, 20],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 6. Royal Imperial Purple & Gold
   {
@@ -471,17 +421,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.86,
     descriptionAr: 'إطارات عاجية مذهبة بنقوش أرستقراطية وقماش مخملي أرجواني فاخر تليق بأباطرة وملوك لعبة البلياردو.',
     ambientEffect: 'royal',
-    geometry: buildTableGeometry({
-      walls: { left: 77, right: 826, top: 55, bottom: 392 },
-      pockets: {
-        tl: [64, 47, 20],
-        tm: [450, 37, 19],
-        tr: [840, 47, 20],
-        bl: [64, 398, 20],
-        bm: [450, 407, 19],
-        br: [840, 398, 20],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 7. Thunder & Lightning
   {
@@ -497,17 +437,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.89,
     descriptionAr: 'صواعق كهربية زرقاء وبنفسجية مشحونة بطاقة الرعد تطلق شرارات ضوئية عند اصطدام الكرات.',
     ambientEffect: 'lightning',
-    geometry: buildTableGeometry({
-      walls: { left: 87, right: 815, top: 56, bottom: 395 },
-      pockets: {
-        tl: [69, 49, 20],
-        tm: [450, 43, 19],
-        tr: [834, 49, 20],
-        bl: [69, 398, 20],
-        bm: [450, 408, 19],
-        br: [834, 398, 20],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 8. Volcanic Lava
   {
@@ -523,17 +453,7 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.90, // Lively energetic cushion bounce
     descriptionAr: 'حواف صخرية متصدعة تتدفق بحمم الصهارة المشتعلة مع ارتدادات حركية قوية لا ترحم.',
     ambientEffect: 'magma',
-    geometry: buildTableGeometry({
-      walls: { left: 81, right: 821, top: 55, bottom: 397 },
-      pockets: {
-        tl: [62, 48, 20],
-        tm: [446, 38, 20],
-        tr: [838, 48, 20],
-        bl: [62, 403, 20],
-        bm: [446, 414, 20],
-        br: [838, 403, 20],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   },
   // 9. Cosmic Nebula
   {
@@ -549,16 +469,6 @@ export const ALL_TABLES: TableItem[] = [
     bounceRestitution: 0.89,
     descriptionAr: 'مجرات حلزونية سابحة وثقوب سوداء تمتص الكرات في أرجاء الفضاء السحيق بإطار كروم ناصع.',
     ambientEffect: 'cosmic',
-    geometry: buildTableGeometry({
-      walls: { left: 90, right: 816, top: 62, bottom: 385 },
-      pockets: {
-        tl: [64, 49, 21],
-        tm: [450, 41, 20],
-        tr: [838, 49, 21],
-        bl: [64, 404, 21],
-        bm: [450, 412, 20],
-        br: [838, 404, 21],
-      },
-    }),
+    geometry: DEFAULT_TABLE_GEOMETRY,
   }
 ];

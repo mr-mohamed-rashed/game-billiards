@@ -500,6 +500,15 @@ export function renderTableScene({
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // Ghost ball preview right where cue ball edge kisses the cushion
+    if (!hitBall && cushionHit) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(endAimX, endAimY, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Bank-shot cushion reflection preview (includes Left/Right English deflection)
     if (!hitBall && cushionHit && (BANK_PERK_CUES.has(activeCueObj.id) || Math.abs(spinX) > 0.15)) {
       let rx = cushionHit.nx !== 0 ? -cosA : cosA;

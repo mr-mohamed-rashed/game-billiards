@@ -137,14 +137,14 @@ export function buildTableGeometry(spec: {
 }
 
 export const DEFAULT_TABLE_GEOMETRY: TableGeometry = buildTableGeometry({
-  walls: { left: 79, right: 825, top: 57, bottom: 392 },
+  walls: { left: 74, right: 826, top: 50, bottom: 400 },
   pockets: {
-    tl: [64, 47, 21],
-    tm: [452, 34, 19],
-    tr: [840, 47, 21],
-    bl: [64, 398, 21],
-    bm: [452, 412, 19],
-    br: [840, 398, 21],
+    tl: [64, 44, 20],
+    tm: [450, 35, 19],
+    tr: [836, 44, 20],
+    bl: [64, 406, 20],
+    bm: [450, 415, 19],
+    br: [836, 406, 20],
   },
 });
 
