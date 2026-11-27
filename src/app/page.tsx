@@ -1358,6 +1358,10 @@ function CueMasterApp() {
           coins={coins}
           gems={gems}
           selectedMode={mode}
+          onSelectMode={(pickedMode) => {
+            modeRef.current = pickedMode;
+            setMode(pickedMode);
+          }}
           onChangeMode={() => setCurrentView("mode_select")}
           onAddCoins={(amt) => saveCoins(coins + amt)}
           onAddGems={(amt) => saveGems(gems + amt)}

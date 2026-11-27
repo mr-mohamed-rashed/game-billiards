@@ -86,80 +86,6 @@ function rayToCushion(
   return { dist: best, nx, ny };
 }
 
-function drawHandIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  isGrabbing: boolean
-) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.shadowColor = "rgba(0,0,0,0.6)";
-  ctx.shadowBlur = 5;
-  ctx.shadowOffsetY = 2;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 1.8;
-
-  if (isGrabbing) {
-    // Closed grabbing hand
-    ctx.beginPath();
-    ctx.roundRect(-7, -5, 14, 11, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    // Curled fingers
-    for (let f = -4.5; f <= 4.5; f += 3) {
-      ctx.beginPath();
-      ctx.roundRect(f - 1.4, -7.5, 2.8, 5, 1.4);
-      ctx.fill();
-      ctx.stroke();
-    }
-    // Thumb gripping from side
-    ctx.beginPath();
-    ctx.roundRect(-9.5, -2.5, 4.5, 6.5, 2);
-    ctx.fill();
-    ctx.stroke();
-  } else {
-    // Open hand (5 fingers)
-    // Palm
-    ctx.beginPath();
-    ctx.roundRect(-6.5, -2.5, 13, 9.5, 3.5);
-    ctx.fill();
-    ctx.stroke();
-
-    // 4 upright fingers
-    const fingers = [
-      { fx: -5.0, top: -10.5 },
-      { fx: -1.8, top: -12.5 },
-      { fx: 1.5, top: -12.0 },
-      { fx: 4.8, top: -9.8 },
-    ];
-    for (let i = 0; i < fingers.length; i++) {
-      const f = fingers[i];
-      ctx.beginPath();
-      ctx.roundRect(f.fx - 1.35, f.top, 2.7, -f.top - 1, 1.35);
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    // Thumb out to the left
-    ctx.beginPath();
-    ctx.moveTo(-6.2, 2);
-    ctx.lineTo(-10.5, -1.5);
-    ctx.lineTo(-8.5, -4);
-    ctx.lineTo(-5.2, -0.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
 export interface RenderSceneParams {
   ctx: CanvasRenderingContext2D;
   balls: Ball[];
@@ -577,8 +503,6 @@ export function renderTableScene({
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
-
-    drawHandIcon(ctx, ballInHandHoverPos.x + 14, ballInHandHoverPos.y - 12, isDraggingBall);
   }
 
   // 4b. Opening Break Shot Grab Halo around Cue Ball (lets player drag cue ball anywhere behind line)
@@ -600,7 +524,6 @@ export function renderTableScene({
     ctx.arc(cueBall.x, cueBall.y, ballRadius + (activeGrab ? 6.5 : 5), 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
-    drawHandIcon(ctx, cueBall.x, cueBall.y - ballRadius - 13, isDraggingBall);
     ctx.restore();
   }
 

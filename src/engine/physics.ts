@@ -446,8 +446,8 @@ export function stepPhysics({
   const cueSpinBonus = 0.75 + (cueActive.stats.spin / 10) * 0.55;
 
   // Legendary Cue Perks & Natural Pocket Drop Tolerance
-  const pocketDropBonus = cueActive.id === "cue_angelic_seraph" ? 6 : 4;
-  const funnelPullBase = cueActive.id === "cue_angelic_seraph" ? 0.72 : 0.58;
+  const pocketDropBonus = cueActive.id === "cue_angelic_seraph" ? 4.5 : 2.5;
+  const funnelPullBase = cueActive.id === "cue_angelic_seraph" ? 0.78 : 0.64;
   const screwPerkMult = cueActive.id === "cue_volcanic_magma" ? 1.65 : 1.0;
   const isDeadStopCue = cueActive.id === "cue_nature_druid";
 
@@ -565,7 +565,7 @@ export function stepPhysics({
         const dx = p.x - ball.x;
         const dy = p.y - ball.y;
         const dist = Math.hypot(dx, dy);
-        const funnelRadius = p.r + 12;
+        const funnelRadius = p.r + 16;
 
         if (dist < funnelRadius && dist > 0.5) {
           const pull = funnelPullBase * (1 - dist / funnelRadius) * effectiveScale;

@@ -134,7 +134,7 @@ export function buildTableGeometry(spec: {
   ];
 
   // Derive straight cushion mouth spans directly from walls & pocket holes
-  const cornerClear = 12;
+  const cornerClear = 15;
   const midClear = 10;
   const railSpans = {
     topLeftEndX: Math.max(bounds.minX + 4, pk.tl[0] + pk.tl[2] + cornerClear),
@@ -184,20 +184,20 @@ export function buildTableGeometryFromWalls(walls: {
   return buildTableGeometry({
     walls,
     pockets: {
-      tl: [walls.left - 3, walls.top - 2, 23],
-      tm: [midX, walls.top - 10, 22],
-      tr: [walls.right + 3, walls.top - 2, 23],
-      bl: [walls.left - 3, walls.bottom + 2, 23],
-      bm: [midX, walls.bottom + 10, 22],
-      br: [walls.right + 3, walls.bottom + 2, 23],
+      tl: [walls.left - 11, walls.top - 11, 18],
+      tm: [midX, walls.top - 18, 18],
+      tr: [walls.right + 11, walls.top - 11, 18],
+      bl: [walls.left - 11, walls.bottom + 11, 18],
+      bm: [midX, walls.bottom + 18, 18],
+      br: [walls.right + 11, walls.bottom + 11, 18],
     },
   });
 }
 
 export const DEFAULT_TABLE_GEOMETRY: TableGeometry = buildTableGeometryFromWalls({
   left: 75,
-  right: 825,
-  top: 54,
+  right: 826,
+  top: 55,
   bottom: 390,
 });
 

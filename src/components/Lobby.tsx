@@ -16,6 +16,7 @@ interface LobbyProps {
   coins: number;
   gems: number;
   selectedMode: GameMode;
+  onSelectMode: (mode: GameMode) => void;
   onChangeMode: () => void;
   onAddCoins: (amount: number) => void;
   onAddGems: (amount: number) => void;
@@ -35,6 +36,7 @@ export function Lobby({
   coins,
   gems,
   selectedMode,
+  onSelectMode,
   onChangeMode,
   onAddCoins,
   onAddGems,
@@ -88,9 +90,9 @@ export function Lobby({
           <button
             onClick={onChangeMode}
             className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 rounded-2xl border border-amber-400/50 text-amber-300 font-black text-[11px] sm:text-xs cursor-pointer shadow active:scale-95"
-            title="تغيير نوع اللعبة (بلياردو / سنوكر / 1 و 15)"
+            title="التبديل بين البلياردو والسنوكر"
           >
-            <span>{isSnooker ? "🔴 سنوكر" : isOneFifteen ? "🟡 1 و 15" : "🎱 بلياردو"}</span>
+            <span>{isSnooker ? "🔴 سنوكر" : "🎱 بلياردو"}</span>
             <span className="text-slate-400">🔄</span>
           </button>
 
@@ -132,9 +134,38 @@ export function Lobby({
               : "border-amber-400/80 bg-gradient-to-b from-blue-950 via-[#071c36] to-slate-950"
           }`}
         >
-          <div className="absolute top-2 left-3 text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full shadow">
+          <div className="hidden sm:block absolute top-2 left-3 text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full shadow">
             {isSnooker ? "بطولة السنوكر الإنجليزي 🔴" : isOneFifteen ? "تحدي 1 و 15 الاحترافي 🟡" : "طاولة لندن الرسمية 🇬🇧"}
           </div>
+
+          {!isSnooker && (
+            <div className="inline-flex items-center gap-1 p-1 mb-2 rounded-2xl bg-black/55 border border-slate-700/80 shadow-inner">
+              <button
+                type="button"
+                onClick={() => onSelectMode("8-ball")}
+                className={`px-3 sm:px-4 py-1.5 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                  !isOneFifteen
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow"
+                    : "text-slate-300 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <span>🎱</span>
+                <span>بلياردو (شوتس / 8-Ball)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectMode("one-fifteen")}
+                className={`px-3 sm:px-4 py-1.5 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                  isOneFifteen
+                    ? "bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow"
+                    : "text-slate-300 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <span>🟡</span>
+                <span>لعبة 1 و 15</span>
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-col items-center justify-center my-1">
             <div className="text-[11px] font-extrabold uppercase tracking-widest text-cyan-300 drop-shadow">
