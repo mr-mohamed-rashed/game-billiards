@@ -77,6 +77,8 @@ interface TableHUDProps {
   showPocketPopover: boolean;
   setShowPocketPopover: React.Dispatch<React.SetStateAction<boolean>>;
   calledPocketId: number | null;
+  oneFifteenHumanEightPocket?: number | null;
+  oneFifteenBotEightPocket?: number | null;
   oneFifteenUncalledCount?: 0 | 1;
   isPortrait: boolean;
   isVirtualLandscape: boolean;
@@ -122,6 +124,8 @@ export function TableHUD({
   showPocketPopover,
   setShowPocketPopover,
   calledPocketId,
+  oneFifteenHumanEightPocket,
+  oneFifteenBotEightPocket,
   oneFifteenUncalledCount = 0,
   isPortrait,
   isVirtualLandscape,
@@ -336,6 +340,8 @@ export function TableHUD({
               <span className="hidden md:inline">
                 {activePocketObj
                   ? activePocketObj.name
+                  : mode === "one-fifteen" && oneFifteenHumanEightPocket !== null && oneFifteenHumanEightPocket !== undefined
+                  ? `🎱 بلاك: ${POCKETS[oneFifteenHumanEightPocket]?.name || "محدد"}`
                   : mode === "one-fifteen" && oneFifteenUncalledCount === 1
                   ? "ضربة 2/2"
                   : "بدون تحديد"}

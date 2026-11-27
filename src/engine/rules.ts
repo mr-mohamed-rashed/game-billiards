@@ -1,6 +1,7 @@
 import {
   Ball,
   BallGroup,
+  CORNER_POCKET_IDS,
   DEFAULT_TABLE_GEOMETRY,
   GameMode,
   ONE_FIFTEEN_POCKET_1,
@@ -8,6 +9,7 @@ import {
   SNOOKER_COLOR_META,
   TableGeometry,
   getBreakLineX,
+  getOppositePocket,
   getSnookerTargetInfo,
 } from "@/types/billiards";
 import { findFreeCueBallPos, placeCueBallSafely, respotBall } from "@/engine/physics";
@@ -32,6 +34,10 @@ export interface ShotOutcomeContext {
   botScore?: number;
   mustShootForwardFromBaulk?: boolean;
   oneFifteenUncalledCount?: 0 | 1;
+  oneFifteenHumanEightPocket?: number | null;
+  oneFifteenBotEightPocket?: number | null;
+  onOneFifteenEightPocketChange?: (target: "human" | "bot", pocketId: number) => void;
+  onRequestOneFifteenPocketChoice?: (shooter: "human" | "bot", forbiddenPocket: number | null) => void;
   onOneFifteenUncalledCountChange?: (next: 0 | 1) => void;
   onSnookerUpdate?: (update: {
     humanScore: number;
@@ -71,6 +77,10 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     onMessage,
     mustShootForwardFromBaulk = false,
     oneFifteenUncalledCount = 0,
+    oneFifteenHumanEightPocket,
+    oneFifteenBotEightPocket,
+    onOneFifteenEightPocketChange,
+    onRequestOneFifteenPocketChoice,
     onOneFifteenUncalledCountChange,
   } = ctx;
 
@@ -115,9 +125,34 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
         );
         return;
       }
-      if (
-        (isOneFifteen && targetPocketForThisShot === null) ||
-        (targetPocketForThisShot !== null && black8Entry.pocketId !== targetPocketForThisShot)
+      if (isOneFifteen) {
+        const designatedPocket =
+          activeShooter === "human" ? oneFifteenHumanEightPocket : oneFifteenBotEightPocket;
+        if (designatedPocket !== null && designatedPocket !== undefined) {
+          if (black8Entry.pocketId !== designatedPocket) {
+            onGameOver(
+              activeShooter === "human" ? "bot" : "human",
+              activeShooter === "human"
+                ? `❌ خسرت المباراة! الكرة 8 سقطت في (${tableGeom.pockets[black8Entry.pocketId]?.name || "جيب آخر"}) بدلاً من جيبك المخصص (${tableGeom.pockets[designatedPocket]?.name || "المحدد"}).`
+                : `🎉 مبروك الفوز! الخصم أسقط الكرة 8 في جيب غير جيبه المخصص (${tableGeom.pockets[designatedPocket]?.name || "المحدد"}).`
+            );
+            return;
+          }
+        } else if (
+          targetPocketForThisShot !== null &&
+          black8Entry.pocketId !== targetPocketForThisShot
+        ) {
+          onGameOver(
+            activeShooter === "human" ? "bot" : "human",
+            activeShooter === "human"
+              ? "❌ خسرت المباراة! الكرة السوداء 8 سقطت في جيب غير الجيب المحدد."
+              : "🎉 مبروك الفوز! الخصم أسقط الكرة 8 في جيب غير المحدد."
+          );
+          return;
+        }
+      } else if (
+        targetPocketForThisShot !== null &&
+        black8Entry.pocketId !== targetPocketForThisShot
       ) {
         onGameOver(
           activeShooter === "human" ? "bot" : "human",
@@ -130,7 +165,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       onGameOver(
         activeShooter,
         activeShooter === "human"
-          ? "🏆 مبروك الفوز الساحق! أحرزت الكرة السوداء 8 في الجيب المحدد!"
+          ? "🏆 مبروك الفوز الساحق! أحرزت الكرة السوداء 8 في الجيب المخصص بنجاح!"
           : "خسرت المباراة! الخصم أحرز الكرة السوداء رقم 8."
       );
       return;
@@ -191,30 +226,46 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       }
       if (!isPractice) {
         const nextTurn = activeShooter === "human" ? "bot" : "human";
-        if (nextTurn === "human") {
+        if (cueScratched) {
+          if (nextTurn === "human") {
+            const freePos = findFreeCueBallPos(balls, tableGeom, baulkLineMaxX);
+            onTurnChange("human");
+            onBallInHand(freePos);
+            onMessage(
+              isOneFifteen
+                ? `✋ فاول على الخصم (${foulReason}): ضع الكرة البيضاء خلف خط البداية!`
+                : `✋ فاول على الخصم (${foulReason}): اسحب الكرة البيضاء في أي مكان!`
+            );
+          } else {
+            // Ensure cue ball is safely placed on table immediately before Bot shoots
+            placeCueBallSafely(balls, tableGeom, baulkLineMaxX);
+            onBallInHand(null);
+            onTurnChange("bot");
+            onMessage(`⚠️ فاول عليك (${foulReason}): دور الخصم.`);
+          }
+        } else {
+          // Non-scratch foul (e.g. hitting opponent's ball first): turn passes WITHOUT moving the cue ball
+          onBallInHand(null);
+          onTurnChange(nextTurn);
+          onMessage(
+            nextTurn === "human"
+              ? `✋ فاول على الخصم (${foulReason}): دورك الآن من مكان الكرة!`
+              : `⚠️ فاول عليك (${foulReason}): انتقل المضرب للخصم (بدون تحريك الجيست).`
+          );
+        }
+      } else {
+        if (cueScratched) {
           const freePos = findFreeCueBallPos(balls, tableGeom, baulkLineMaxX);
-          onTurnChange("human");
           onBallInHand(freePos);
           onMessage(
             isOneFifteen
-              ? `✋ فاول على الخصم (${foulReason}): ضع الكرة البيضاء خلف خط البداية!`
-              : `✋ فاول على الخصم (${foulReason}): اسحب الكرة البيضاء وضعها!`
+              ? `✋ فاول (${foulReason}): ضع الكرة البيضاء خلف خط البداية!`
+              : `✋ فاول (${foulReason}): ضع الكرة البيضاء!`
           );
         } else {
-          // Ensure cue ball is safely placed on table immediately before Bot shoots
-          placeCueBallSafely(balls, tableGeom, baulkLineMaxX);
           onBallInHand(null);
-          onTurnChange("bot");
-          onMessage(`⚠️ فاول عليك (${foulReason}): دور الخصم.`);
+          onMessage(`⚠️ فاول (${foulReason})!`);
         }
-      } else {
-        const freePos = findFreeCueBallPos(balls, tableGeom, baulkLineMaxX);
-        onBallInHand(freePos);
-        onMessage(
-          isOneFifteen
-            ? `✋ فاول (${foulReason}): ضع الكرة البيضاء خلف خط البداية!`
-            : `✋ فاول (${foulReason}): ضع الكرة البيضاء!`
-        );
       }
       return;
     }
@@ -299,9 +350,24 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       }
     }
 
+    const CORNER_POCKETS = new Set([0, 2, 3, 5]);
+    const cornerCalled1Or15 =
+      isOneFifteen &&
+      !wasBreakShot &&
+      targetPocketForThisShot !== null &&
+      CORNER_POCKETS.has(targetPocketForThisShot) &&
+      invalidPocketEntries.some(
+        (entry) =>
+          (entry.ball.number === 1 || entry.ball.number === 15) &&
+          entry.pocketId === targetPocketForThisShot
+      );
+
     const legalPottedBalls = validPocketEntries.map((entry) => entry.ball);
     const pottedInWrongPocket =
-      pottedList.length > 0 && invalidPocketEntries.length > 0 && validPocketEntries.length === 0;
+      pottedList.length > 0 &&
+      invalidPocketEntries.length > 0 &&
+      validPocketEntries.length === 0 &&
+      !cornerCalled1Or15;
 
     if (humanGroup === "unassigned" && legalPottedBalls.length > 0) {
       const firstLegal = legalPottedBalls.find((b) => b.type === "solid" || b.type === "stripe");
@@ -344,8 +410,97 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
         (updatedHumanGroup === "solids" ? b.type === "solid" : b.type === "stripe")
     );
 
-    if (pottedOwnBall) {
+    if (isOneFifteen && updatedHumanGroup !== "unassigned") {
+      const remainingHuman = remainingHumanAfter.length;
+      const remainingBot = balls.filter(
+        (b) =>
+          !b.isPotted &&
+          b.number !== 8 &&
+          (updatedBotGroup === "solids" ? b.type === "solid" : b.type === "stripe")
+      ).length;
+
+      // 1 & 15: Check Human reaching 8-ball
       if (
+        remainingHuman === 0 &&
+        (oneFifteenHumanEightPocket === null || oneFifteenHumanEightPocket === undefined)
+      ) {
+        const humanType = updatedHumanGroup === "solids" ? "solid" : "stripe";
+        const lastEntry =
+          validPocketEntries.filter((e) => e.ball.type === humanType).pop() ||
+          pottedList.filter((e) => e.ball.type === humanType).pop();
+        const rawPocket = lastEntry?.pocketId;
+
+        if (rawPocket === undefined || rawPocket === 1 || rawPocket === 4) {
+          // Cannot force middle! Player must choose a corner pocket
+          onRequestOneFifteenPocketChoice?.("human", oneFifteenBotEightPocket ?? null);
+          onMessage(
+            "🎯 أنهيت كراتك! وفقاً لقوانين 1 و 15: لا يجوز إجبارك على الميدل — اختر جيب الركن للكرة 8 الآن."
+          );
+        } else if (
+          oneFifteenBotEightPocket !== null &&
+          oneFifteenBotEightPocket !== undefined &&
+          rawPocket === oneFifteenBotEightPocket
+        ) {
+          // Same pocket conflict! Second player gets opposite
+          const oppPocket = getOppositePocket(rawPocket);
+          onOneFifteenEightPocketChange?.("human", oppPocket);
+          onMessage(
+            `🎯 الخصم سبقك لنفس الجيب! وفقاً لقواعد 1 و 15 جيبك أصبح الجيب المعاكس: (${tableGeom.pockets[oppPocket]?.name}).`
+          );
+        } else {
+          onOneFifteenEightPocketChange?.("human", rawPocket);
+          onMessage(
+            `🎱 أنهيت كراتك! جيب الكرة 8 المخصص لك هو مكان آخر كرة: (${tableGeom.pockets[rawPocket]?.name}).`
+          );
+        }
+      }
+
+      // 1 & 15: Check Bot reaching 8-ball
+      if (
+        remainingBot === 0 &&
+        (oneFifteenBotEightPocket === null || oneFifteenBotEightPocket === undefined)
+      ) {
+        const botType = updatedBotGroup === "solids" ? "solid" : "stripe";
+        const lastEntry =
+          validPocketEntries.filter((e) => e.ball.type === botType).pop() ||
+          pottedList.filter((e) => e.ball.type === botType).pop();
+        const rawPocket = lastEntry?.pocketId;
+
+        if (rawPocket === undefined || rawPocket === 1 || rawPocket === 4) {
+          const forbidden = oneFifteenHumanEightPocket ?? null;
+          const openCorners = CORNER_POCKET_IDS.filter((id) => id !== forbidden);
+          const chosenCorner = openCorners[Math.floor(Math.random() * openCorners.length)] ?? 2;
+          onOneFifteenEightPocketChange?.("bot", chosenCorner);
+          onMessage(
+            `🤖 الخصم أنهى كراته واختار جيب الركن للكرة 8: (${tableGeom.pockets[chosenCorner]?.name}).`
+          );
+        } else if (
+          oneFifteenHumanEightPocket !== null &&
+          oneFifteenHumanEightPocket !== undefined &&
+          rawPocket === oneFifteenHumanEightPocket
+        ) {
+          const oppPocket = getOppositePocket(rawPocket);
+          onOneFifteenEightPocketChange?.("bot", oppPocket);
+          onMessage(
+            `🤖 الخصم أنهى في نفس جيبك، فأصبح جيبه المعاكس: (${tableGeom.pockets[oppPocket]?.name}).`
+          );
+        } else {
+          onOneFifteenEightPocketChange?.("bot", rawPocket);
+          onMessage(
+            `🤖 الخصم أنهى كراته وجيب كرته 8 هو مكان آخر كرة: (${tableGeom.pockets[rawPocket]?.name}).`
+          );
+        }
+      }
+    }
+
+    if (pottedOwnBall || cornerCalled1Or15) {
+      if (cornerCalled1Or15 && !pottedOwnBall) {
+        onMessage(
+          activeShooter === "human"
+            ? "🟡 نزلت 1 أو 15 في الركن المحدد: خرجت لنقطة المثلث والمضرب معاك!"
+            : "🤖 الخصم أنزل 1 أو 15 في الركن المحدد؛ خرجت للمثلث ويكمل دوره..."
+        );
+      } else if (
         activeShooter === "human" &&
         remainingHumanAfter.length === 0 &&
         updatedHumanGroup !== "unassigned"

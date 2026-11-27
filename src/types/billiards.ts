@@ -5,6 +5,22 @@ export type ActiveModalType = "settings" | "shop" | "leaderboard" | "tournaments
 export const ONE_FIFTEEN_POCKET_1 = 1;  // أعلى وسط (شمال الكسرة)
 export const ONE_FIFTEEN_POCKET_15 = 4; // أسفل وسط (يمين الكسرة)
 
+export const OPPOSITE_POCKET_MAP: Record<number, number> = {
+  0: 5, // أعلى يسار <-> أسفل يمين
+  1: 4, // أعلى وسط <-> أسفل وسط
+  2: 3, // أعلى يمين <-> أسفل يسار
+  3: 2, // أسفل يسار <-> أعلى يمين
+  4: 1, // أسفل وسط <-> أعلى وسط
+  5: 0, // أسفل يمين <-> أعلى يسار
+};
+
+export const CORNER_POCKET_IDS = [0, 2, 3, 5] as const;
+export const MIDDLE_POCKET_IDS = [1, 4] as const;
+
+export function getOppositePocket(pocketId: number): number {
+  return OPPOSITE_POCKET_MAP[pocketId] ?? pocketId;
+}
+
 export type SnookerTargetInfo =
   | { phase: "red" }
   | { phase: "color" }

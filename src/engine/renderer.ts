@@ -105,6 +105,8 @@ export interface RenderSceneParams {
   slowMoCam?: CinematicCamState | null;
   slowMoIntensity?: number;
   calledPocketId: number | null;
+  oneFifteenHumanEightPocket?: number | null;
+  oneFifteenBotEightPocket?: number | null;
   humanGroup: BallGroup;
   snookerTarget?: SnookerTargetInfo;
   aimAngle: number;
@@ -140,6 +142,8 @@ export function renderTableScene({
   slowMoCam = null,
   slowMoIntensity = 0,
   calledPocketId,
+  oneFifteenHumanEightPocket,
+  oneFifteenBotEightPocket,
   humanGroup,
   snookerTarget,
   aimAngle,
@@ -298,6 +302,51 @@ export function renderTableScene({
     (mode === "8-ball" || mode === "one-fifteen") && humanGroup !== "unassigned" && remainingHumanGroupBalls.length === 0;
 
   // 2. Pocket Target Call Highlight (Ring aligned flush to exact outer black pocket rim)
+  if (mode === "one-fifteen") {
+    // Show designated pockets for 1 & 15 mode
+    if (oneFifteenHumanEightPocket !== null && oneFifteenHumanEightPocket !== undefined) {
+      const p = pockets[oneFifteenHumanEightPocket];
+      if (p) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([4, 2]);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r + 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = "rgba(251, 191, 36, 0.22)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.direction = "rtl";
+        ctx.fillStyle = "#fbbf24";
+        ctx.font = "bold 10px 'Segoe UI', Tahoma, Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("🎱 هدفك (8)", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? p.r + 14 : -(p.r + 6)));
+      }
+    }
+    if (oneFifteenBotEightPocket !== null && oneFifteenBotEightPocket !== undefined && oneFifteenBotEightPocket !== oneFifteenHumanEightPocket) {
+      const p = pockets[oneFifteenBotEightPocket];
+      if (p) {
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r + 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.direction = "rtl";
+        ctx.fillStyle = "#38bdf8";
+        ctx.font = "bold 9px 'Segoe UI', Tahoma, Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("🤖 هدف الخصم", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? p.r + 14 : -(p.r + 6)));
+      }
+    }
+  }
+
   if (calledPocketId !== null) {
     const p = pockets[calledPocketId];
     if (p) {
@@ -314,13 +363,14 @@ export function renderTableScene({
       ctx.arc(p.x, p.y, Math.max(8, p.r - 2), 0, Math.PI * 2);
       ctx.fill();
 
+      ctx.direction = "rtl";
       ctx.fillStyle = "#eab308";
-      ctx.font = "bold 10px sans-serif";
+      ctx.font = "bold 10px 'Segoe UI', Tahoma, Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("🎯 الهدف", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? p.r + 12 : -(p.r + 6)));
     }
-  } else if (humanOnEightBall && (turn === "human" || isPractice) && !isShooting) {
-    // Prompt visual rings on all 6 pockets so player sees where to tap for the 8-ball
+  } else if (humanOnEightBall && (turn === "human" || isPractice) && !isShooting && mode !== "one-fifteen") {
+    // Prompt visual rings on all 6 pockets so player sees where to tap for the 8-ball in standard 8-ball
     ctx.strokeStyle = "rgba(250, 204, 21, 0.72)";
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
@@ -608,10 +658,11 @@ export function renderTableScene({
         warningText = "⚠️ فاول: هدفك الكرة 8!";
       }
       if (isAimedTargetLegal && mode === "one-fifteen" && !isBreakShot) {
-        if (hitBall.number === 1 && calledPocketId !== ONE_FIFTEEN_POCKET_1) {
-          warningText = "🟡 الكرة 1 تنزل في الميدل الأعلى فقط!";
-        } else if (hitBall.number === 15 && calledPocketId !== ONE_FIFTEEN_POCKET_15) {
-          warningText = "🟤 الكرة 15 تنزل في الميدل الأسفل فقط!";
+        const isCorner = calledPocketId === 0 || calledPocketId === 2 || calledPocketId === 3 || calledPocketId === 5;
+        if (hitBall.number === 1 && calledPocketId !== ONE_FIFTEEN_POCKET_1 && !isCorner) {
+          warningText = "🟡 الكرة 1 تنزل في الميدل الأعلى فقط (أو الركن المحدد لتخرج للمثلث)!";
+        } else if (hitBall.number === 15 && calledPocketId !== ONE_FIFTEEN_POCKET_15 && !isCorner) {
+          warningText = "🟤 الكرة 15 تنزل في الميدل الأسفل فقط (أو الركن المحدد لتخرج للمثلث)!";
         }
       }
     } else if (hitBall && mode === "snooker" && snookerTarget && !isBotAiming) {
@@ -669,8 +720,9 @@ export function renderTableScene({
       ctx.stroke();
     }
     if (!hitBall && !isAimedTargetLegal && warningText) {
+      ctx.direction = "rtl";
       ctx.fillStyle = "#ef4444";
-      ctx.font = "bold 11px sans-serif";
+      ctx.font = "bold 11px 'Segoe UI', Tahoma, Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(warningText, cueBall.x, Math.max(walls.top + 18, cueBall.y - 22));
     }
@@ -763,8 +815,9 @@ export function renderTableScene({
       ctx.fill();
 
       if (!isAimedTargetLegal && warningText) {
+        ctx.direction = "rtl";
         ctx.fillStyle = "#ef4444";
-        ctx.font = "bold 11px sans-serif";
+        ctx.font = "bold 11px 'Segoe UI', Tahoma, Arial, sans-serif";
         ctx.textAlign = "center";
         ctx.fillText(warningText, hitBall.x, hitBall.y - 18);
       }

@@ -7,6 +7,7 @@ import {
   ActiveModalType,
   Ball,
   BallGroup,
+  CORNER_POCKET_IDS,
   CinematicCamState,
   GameMode,
   TABLE_HEIGHT,
@@ -119,6 +120,9 @@ function CueMasterApp() {
 
   const [calledPocketId, setCalledPocketId] = useState<number | null>(null);
   const [oneFifteenUncalledCount, setOneFifteenUncalledCount] = useState<0 | 1>(0);
+  const [oneFifteenHumanEightPocket, setOneFifteenHumanEightPocket] = useState<number | null>(null);
+  const [oneFifteenBotEightPocket, setOneFifteenBotEightPocket] = useState<number | null>(null);
+  const [oneFifteenChoiceModal, setOneFifteenChoiceModal] = useState<{ forbiddenPocket: number | null } | null>(null);
   const [isBallInHand, setIsBallInHand] = useState(false);
   const [isBreakShot, setIsBreakShot] = useState(true);
   const [humanScore, setHumanScore] = useState(0);
@@ -177,6 +181,9 @@ function CueMasterApp() {
   const isBallInHandRef = useRef(false);
   const mustShootForwardFromBaulkRef = useRef(false);
   const oneFifteenUncalledCountRef = useRef<0 | 1>(0);
+  const oneFifteenHumanEightPocketRef = useRef<number | null>(null);
+  const oneFifteenBotEightPocketRef = useRef<number | null>(null);
+  const aimAngleHistoryRef = useRef<{ angle: number; time: number }[]>([]);
   const isBreakShotRef = useRef(true);
   const wasBreakShotRef = useRef(false);
   const ballInHandHoverPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -226,6 +233,8 @@ function CueMasterApp() {
   useEffect(() => { botGroupRef.current = botGroup; }, [botGroup]);
   useEffect(() => { isShootingRef.current = isShooting; }, [isShooting]);
   useEffect(() => { isBallInHandRef.current = isBallInHand; }, [isBallInHand]);
+  useEffect(() => { oneFifteenHumanEightPocketRef.current = oneFifteenHumanEightPocket; }, [oneFifteenHumanEightPocket]);
+  useEffect(() => { oneFifteenBotEightPocketRef.current = oneFifteenBotEightPocket; }, [oneFifteenBotEightPocket]);
 
   const activeCue = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
   const currentTable = ALL_TABLES.find((t) => t.id === selectedTable) || ALL_TABLES[0];
@@ -415,6 +424,12 @@ function CueMasterApp() {
     mustShootForwardFromBaulkRef.current = false;
     oneFifteenUncalledCountRef.current = 0;
     setOneFifteenUncalledCount(0);
+    oneFifteenHumanEightPocketRef.current = null;
+    oneFifteenBotEightPocketRef.current = null;
+    setOneFifteenHumanEightPocket(null);
+    setOneFifteenBotEightPocket(null);
+    setOneFifteenChoiceModal(null);
+    aimAngleHistoryRef.current = [];
     isBreakShotRef.current = true;
     isDraggingBreakCueRef.current = false;
     isShootingRef.current = false;
@@ -588,6 +603,8 @@ function CueMasterApp() {
         slowMoCam: cinematicCamRef.current,
         slowMoIntensity,
         calledPocketId: calledPocketIdRef.current,
+        oneFifteenHumanEightPocket: oneFifteenHumanEightPocketRef.current,
+        oneFifteenBotEightPocket: oneFifteenBotEightPocketRef.current,
         humanGroup: humanGroupRef.current,
         snookerTarget: getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current),
         aimAngle: aimAngleRef.current,
@@ -744,6 +761,24 @@ function CueMasterApp() {
           botScore: botScoreRef.current,
           mustShootForwardFromBaulk: shotMustShootForward,
           oneFifteenUncalledCount: oneFifteenUncalledCountRef.current,
+          oneFifteenHumanEightPocket: oneFifteenHumanEightPocketRef.current,
+          oneFifteenBotEightPocket: oneFifteenBotEightPocketRef.current,
+          onOneFifteenEightPocketChange: (target, pId) => {
+            if (target === "human") {
+              oneFifteenHumanEightPocketRef.current = pId;
+              setOneFifteenHumanEightPocket(pId);
+              calledPocketIdRef.current = pId;
+              setCalledPocketId(pId);
+            } else {
+              oneFifteenBotEightPocketRef.current = pId;
+              setOneFifteenBotEightPocket(pId);
+            }
+          },
+          onRequestOneFifteenPocketChoice: (shooter, forbiddenPocket) => {
+            if (shooter === "human") {
+              setOneFifteenChoiceModal({ forbiddenPocket });
+            }
+          },
           onOneFifteenUncalledCountChange: (nextCount) => {
             oneFifteenUncalledCountRef.current = nextCount;
             setOneFifteenUncalledCount(nextCount);
@@ -816,7 +851,7 @@ function CueMasterApp() {
       ? getBreakLineX(modeRef.current, getActiveGeom())
       : undefined;
 
-  const tryPlaceBallInHand = (x: number, y: number) => {
+  const tryPlaceBallInHand = (x: number, y: number, finalize = false) => {
     const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
     const clamped = clampBallInHandPos(x, y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
     const isOverlapping = ballsRef.current
@@ -830,20 +865,50 @@ function CueMasterApp() {
         cueBall.vx = 0;
         cueBall.vy = 0;
         cueBall.isPotted = false;
-        isBallInHandRef.current = false;
-        ballInHandHoverPosRef.current = null;
-        setIsBallInHand(false);
-        setTurnMessage(
-          modeRef.current === "one-fifteen" && mustShootForwardFromBaulkRef.current
-            ? "✅ تم وضع الكرة خلف الخط! صوّب للأمام (وحدد جيب أو العب بدون تحديد)."
-            : "✅ تم وضع الكرة! وجّه واسحب شريط القوة على اليسار للضرب."
-        );
+        ballInHandHoverPosRef.current = { x: clamped.x, y: clamped.y };
+        if (finalize) {
+          isBallInHandRef.current = false;
+          setIsBallInHand(false);
+          setTurnMessage(
+            modeRef.current === "one-fifteen" && mustShootForwardFromBaulkRef.current
+              ? "✅ تم تثبيت الكرة خلف الخط! صوّب للأمام واسحب شريط القوة للضرب."
+              : "✅ تم تثبيت الكرة! وجّه واسحب شريط القوة على اليسار للضرب."
+          );
+        } else {
+          setTurnMessage("✋ تم وضع الكرة! يمكنك سحبها مجدداً لأي مكان أو الضغط على (تثبيت الكرة) للبدء.");
+        }
         if (soundEnabledRef.current) playBallClack(4);
       }
       return true;
     }
     setTurnMessage("⚠️ لا يمكن وضع الكرة فوق كرة أخرى!");
     return false;
+  };
+
+  const confirmBallInHand = () => {
+    if (!isBallInHandRef.current) return;
+    const cueBall = ballsRef.current[0];
+    if (cueBall && !cueBall.isPotted) {
+      isBallInHandRef.current = false;
+      setIsBallInHand(false);
+      setTurnMessage(
+        modeRef.current === "one-fifteen" && mustShootForwardFromBaulkRef.current
+          ? "✅ تم تثبيت الكرة خلف الخط! صوّب للأمام واسحب شريط القوة للضرب."
+          : "✅ تم تثبيت الكرة! وجّه واسحب شريط القوة على اليسار للضرب."
+      );
+      if (soundEnabledRef.current) playBallClack(3);
+    }
+  };
+
+  const handleChooseOneFifteenEightPocket = (pocketId: number) => {
+    oneFifteenHumanEightPocketRef.current = pocketId;
+    setOneFifteenHumanEightPocket(pocketId);
+    calledPocketIdRef.current = pocketId;
+    setCalledPocketId(pocketId);
+    setOneFifteenChoiceModal(null);
+    const pName = getActiveGeom().pockets[pocketId]?.name || `جيب ${pocketId}`;
+    setTurnMessage(`🎯 تم تحديد جيب الكرة 8 المخصص لك: (${pName})!`);
+    if (soundEnabledRef.current) playBallClack(3);
   };
 
   const syncCanvasCursor = () => {
@@ -900,7 +965,17 @@ function CueMasterApp() {
     if (isBallInHandRef.current) {
       if (isDraggingBallInHandRef.current || e.pointerType === "mouse") {
         const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
-        ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
+        const clamped = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
+        ballInHandHoverPosRef.current = clamped;
+        const isOverlapping = ballsRef.current
+          .slice(1)
+          .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < ballRadius * 2.2);
+        const cueBall = ballsRef.current[0];
+        if (!isOverlapping && cueBall) {
+          cueBall.x = clamped.x;
+          cueBall.y = clamped.y;
+          cueBall.isPotted = false;
+        }
       }
       syncCanvasCursor();
       return;
@@ -922,7 +997,27 @@ function CueMasterApp() {
     syncCanvasCursor();
 
     if (cueBall && (isAimDraggingRef.current || e.buttons === 1)) {
-      aimAngleRef.current = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+      const dx = coords.x - cueBall.x;
+      const dy = coords.y - cueBall.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 8) {
+        const targetAngle = Math.atan2(dy, dx);
+        let diff = (targetAngle - aimAngleRef.current) % (Math.PI * 2);
+        if (diff > Math.PI) diff -= Math.PI * 2;
+        if (diff < -Math.PI) diff += Math.PI * 2;
+
+        // Damping factor for weighted, steady aiming ("يتقل شويه"):
+        // Small micro-adjustments use heavier damping (0.35) for rock-solid stability;
+        // Faster sweeps follow smoothly (0.52).
+        const damping = Math.abs(diff) < 0.12 ? 0.35 : 0.52;
+        aimAngleRef.current += diff * damping;
+
+        const now = performance.now();
+        aimAngleHistoryRef.current.push({ angle: aimAngleRef.current, time: now });
+        if (aimAngleHistoryRef.current.length > 8) {
+          aimAngleHistoryRef.current.shift();
+        }
+      }
     }
   };
 
@@ -950,7 +1045,17 @@ function CueMasterApp() {
     if (isBallInHandRef.current) {
       isDraggingBallInHandRef.current = true;
       const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
-      ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
+      const clamped = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
+      ballInHandHoverPosRef.current = clamped;
+      const isOverlapping = ballsRef.current
+        .slice(1)
+        .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < ballRadius * 2.2);
+      const cueBall = ballsRef.current[0];
+      if (!isOverlapping && cueBall) {
+        cueBall.x = clamped.x;
+        cueBall.y = clamped.y;
+        cueBall.isPotted = false;
+      }
       syncCanvasCursor();
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
       return;
@@ -975,7 +1080,12 @@ function CueMasterApp() {
 
       isAimDraggingRef.current = true;
       if (cueBall) {
-        aimAngleRef.current = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+        const dx = coords.x - cueBall.x;
+        const dy = coords.y - cueBall.y;
+        if (Math.hypot(dx, dy) > 8) {
+          aimAngleRef.current = Math.atan2(dy, dx);
+          aimAngleHistoryRef.current = [{ angle: aimAngleRef.current, time: performance.now() }];
+        }
       }
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     }
@@ -993,9 +1103,27 @@ function CueMasterApp() {
       const target = coords
         ? clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius)
         : ballInHandHoverPosRef.current;
-      if (target) tryPlaceBallInHand(target.x, target.y);
+      if (target) {
+        tryPlaceBallInHand(target.x, target.y, false);
+      }
+      syncCanvasCursor();
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+      return;
     }
-    isAimDraggingRef.current = false;
+    if (isAimDraggingRef.current) {
+      isAimDraggingRef.current = false;
+      // Filter out finger-lift jitter:
+      // When lifting finger off screen, use angle held right before release roll
+      const history = aimAngleHistoryRef.current;
+      if (history.length >= 2) {
+        const now = performance.now();
+        const stable = history.find((h) => now - h.time >= 40) || history[0];
+        if (stable) {
+          aimAngleRef.current = stable.angle;
+        }
+      }
+      aimAngleHistoryRef.current = [];
+    }
     syncCanvasCursor();
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
   };
@@ -1042,7 +1170,10 @@ function CueMasterApp() {
 
   const handlePowerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     unlockAudio();
-    if (isShootingRef.current || isBallInHandRef.current || (!isPracticeRef.current && turnRef.current !== "human")) return;
+    if (isShootingRef.current || (!isPracticeRef.current && turnRef.current !== "human")) return;
+    if (isBallInHandRef.current) {
+      confirmBallInHand();
+    }
     isVerticalMeterDraggingRef.current = true;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     updatePowerFromPointer(e.clientX, e.clientY, e.currentTarget);
@@ -1060,7 +1191,8 @@ function CueMasterApp() {
 
     const finalPower = powerRef.current;
     setPower(finalPower);
-    if (finalPower >= 12 && (isPracticeRef.current || turnRef.current === "human") && !isShootingRef.current && !isBallInHandRef.current) {
+    if (finalPower >= 12 && (isPracticeRef.current || turnRef.current === "human") && !isShootingRef.current) {
+      if (isBallInHandRef.current) confirmBallInHand();
       handleShoot(finalPower);
     } else {
       applyPowerVisual(0);
@@ -1458,6 +1590,8 @@ function CueMasterApp() {
             showPocketPopover={showPocketPopover}
             setShowPocketPopover={setShowPocketPopover}
             calledPocketId={calledPocketId}
+            oneFifteenHumanEightPocket={oneFifteenHumanEightPocket}
+            oneFifteenBotEightPocket={oneFifteenBotEightPocket}
             oneFifteenUncalledCount={oneFifteenUncalledCount}
             isPortrait={isPortrait}
             isVirtualLandscape={isVirtualLandscape}
@@ -1530,7 +1664,7 @@ function CueMasterApp() {
           <div className="flex-1 min-h-0 flex flex-row items-stretch overflow-hidden w-full">
             <PowerMeter
               power={power}
-              disabled={(!isPractice && turn !== "human") || isShooting || isBallInHand}
+              disabled={(!isPractice && turn !== "human") || isShooting}
               trackRef={powerTrackRef}
               fillRef={powerFillRef}
               handleRef={powerHandleRef}
@@ -1549,13 +1683,24 @@ function CueMasterApp() {
               {isBallInHand && (
                 <div
                   dir="rtl"
-                  className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-blue-950/95 border border-blue-400 text-blue-100 px-3 py-1 rounded-full text-[10px] font-black shadow-lg pointer-events-none whitespace-nowrap"
+                  className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border-2 border-amber-400 text-amber-300 px-3 py-1.5 rounded-full text-[10px] sm:text-xs font-black shadow-2xl flex items-center gap-2.5 whitespace-nowrap"
                 >
-                  {mode === "snooker"
-                    ? "✋ الكرة في يدك: ضعها في أي مكان خلف الخط ثم ارفع إصبعك"
-                    : mode === "one-fifteen"
-                    ? "✋ الكرة في يدك: ضعها خلف خط البداية والعب للأمام فقط"
-                    : "✋ الكرة في يدك: حرّكها بحرية في أي مكان داخل الطاولة"}
+                  <span className="text-sm animate-pulse">✋</span>
+                  <span>
+                    {mode === "snooker"
+                      ? "الكرة بيدك: حرّكها لأي مكان خلف الخط"
+                      : mode === "one-fifteen"
+                      ? "الكرة بيدك: اسحبها بحرية خلف الخط — يمكنك تغيير مكانها كما تشاء"
+                      : "الكرة بيدك: اسحبها بحرية — يمكنك تغيير مكانها وتعديلها كما تشاء"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={confirmBallInHand}
+                    className="px-2.5 py-0.5 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-[10px] sm:text-[11px] cursor-pointer shadow flex items-center gap-1 transition-all"
+                  >
+                    <span>✓</span>
+                    <span>تثبيت الكرة</span>
+                  </button>
                 </div>
               )}
 
@@ -1629,6 +1774,48 @@ function CueMasterApp() {
                 />
               </div>
             </main>
+          </div>
+        </div>
+      )}
+
+      {oneFifteenChoiceModal && (
+        <div
+          dir="rtl"
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div className="bg-[#0b121e] border-2 border-amber-400/90 rounded-3xl w-full max-w-sm sm:max-w-md p-5 shadow-2xl space-y-3.5 text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-2xl">
+              🎱
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-amber-300">
+              اختر جيب الكرة السوداء 8 (البلاك)
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              وفقاً لقوانين لعبة 1 و 15: لا يجوز إجبارك على إسقاط الكرة السوداء في جيب الميدل (الوسط). اختر جيب الركن المفضل لديك للكرة 8:
+            </p>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {CORNER_POCKET_IDS.map((pId) => {
+                const pObj = getActiveGeom().pockets[pId];
+                const isTaken = oneFifteenBotEightPocket === pId;
+                return (
+                  <button
+                    key={pId}
+                    type="button"
+                    disabled={isTaken}
+                    onClick={() => handleChooseOneFifteenEightPocket(pId)}
+                    className={`p-3 rounded-2xl border font-black text-xs flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      isTaken
+                        ? "bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed opacity-50"
+                        : "bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border-amber-400/40 text-amber-300 active:scale-95 shadow-md"
+                    }`}
+                  >
+                    <span className="text-base">🎯</span>
+                    <span>{pObj?.name || `جيب ${pId}`}</span>
+                    {isTaken && <span className="text-[10px] text-rose-400">(محجوز للخصم)</span>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
