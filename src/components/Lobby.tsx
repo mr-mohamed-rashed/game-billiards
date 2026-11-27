@@ -43,6 +43,7 @@ export function Lobby({
   onOpenModal,
 }: LobbyProps) {
   const isSnooker = selectedMode === "snooker";
+  const isOneFifteen = selectedMode === "one-fifteen";
   const [selectedStake, setSelectedStake] = useState(100);
   const diff = getMatchDifficulty(selectedStake, false);
   const selectedPrize = Math.round(selectedStake * 1.9);
@@ -87,9 +88,9 @@ export function Lobby({
           <button
             onClick={onChangeMode}
             className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 rounded-2xl border border-amber-400/50 text-amber-300 font-black text-[11px] sm:text-xs cursor-pointer shadow active:scale-95"
-            title="تغيير نوع اللعبة (بلياردو / سنوكر)"
+            title="تغيير نوع اللعبة (بلياردو / سنوكر / 1 و 15)"
           >
-            <span>{isSnooker ? "🔴 سنوكر" : "🎱 بلياردو"}</span>
+            <span>{isSnooker ? "🔴 سنوكر" : isOneFifteen ? "🟡 1 و 15" : "🎱 بلياردو"}</span>
             <span className="text-slate-400">🔄</span>
           </button>
 
@@ -123,28 +124,32 @@ export function Lobby({
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-4 max-w-4xl mx-auto w-full space-y-4">
         {/* HERO CARD: Active Selected Mode (8-Ball or Snooker) */}
         <div
-          className={`relative w-full rounded-3xl overflow-hidden border-2 shadow-[0_10px_35px_rgba(0,0,0,0.85)] p-5 md:p-6 text-center ${isSnooker
+          className={`relative w-full rounded-3xl overflow-hidden border-2 shadow-[0_10px_35px_rgba(0,0,0,0.85)] p-5 md:p-6 text-center ${
+            isSnooker
               ? "border-rose-400/80 bg-gradient-to-b from-rose-950 via-[#2a0714] to-slate-950"
+              : isOneFifteen
+              ? "border-amber-300/85 bg-gradient-to-b from-amber-950 via-[#261405] to-slate-950"
               : "border-amber-400/80 bg-gradient-to-b from-blue-950 via-[#071c36] to-slate-950"
-            }`}
+          }`}
         >
           <div className="absolute top-2 left-3 text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full shadow">
-            {isSnooker ? "بطولة السنوكر الإنجليزي 🔴" : "طاولة لندن الرسمية 🇬🇧"}
+            {isSnooker ? "بطولة السنوكر الإنجليزي 🔴" : isOneFifteen ? "تحدي 1 و 15 الاحترافي 🟡" : "طاولة لندن الرسمية 🇬🇧"}
           </div>
 
           <div className="flex flex-col items-center justify-center my-1">
             <div className="text-[11px] font-extrabold uppercase tracking-widest text-cyan-300 drop-shadow">
-              {isSnooker ? "CHAMPIONSHIP SNOOKER" : "DOWNTOWN"}
+              {isSnooker ? "CHAMPIONSHIP SNOOKER" : isOneFifteen ? "EGYPTIAN CALL-POCKET" : "DOWNTOWN"}
             </div>
             <div className="flex items-center gap-2 text-3xl md:text-5xl font-black italic tracking-tight text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)]">
-              <span>{isSnooker ? "MASTERS" : "LONDON"}</span>
+              <span>{isSnooker ? "MASTERS" : isOneFifteen ? "1 & 15" : "LONDON"}</span>
               <span
-                className={`w-8 h-8 md:w-11 md:h-11 rounded-full border-2 border-white flex items-center justify-center text-sm md:text-lg font-black not-italic text-white shadow-lg ${isSnooker ? "bg-red-600" : "bg-slate-950"
-                  }`}
+                className={`w-8 h-8 md:w-11 md:h-11 rounded-full border-2 border-white flex items-center justify-center text-sm md:text-lg font-black not-italic text-white shadow-lg ${
+                  isSnooker ? "bg-red-600" : isOneFifteen ? "bg-amber-400 !text-slate-950" : "bg-slate-950"
+                }`}
               >
-                {isSnooker ? "15" : "8"}
+                {isSnooker ? "15" : isOneFifteen ? "1" : "8"}
               </span>
-              <span>{isSnooker ? "CUP" : "PUB"}</span>
+              <span>{isSnooker ? "CUP" : isOneFifteen ? "PRO" : "PUB"}</span>
             </div>
           </div>
 

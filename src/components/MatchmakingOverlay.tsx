@@ -124,6 +124,7 @@ export function MatchmakingOverlay({
   }, []);
 
   const isSnooker = mode === "snooker";
+  const isOneFifteen = mode === "one-fifteen";
 
   return (
     <div
@@ -136,7 +137,7 @@ export function MatchmakingOverlay({
             <div className="relative w-28 h-28 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20 border-t-indigo-400 animate-spin" />
               <div className="absolute w-20 h-20 rounded-full border-2 border-emerald-400/40 animate-ping" />
-              <span className="text-4xl animate-bounce">{isSnooker ? "🔴" : "🎱"}</span>
+              <span className="text-4xl animate-bounce">{isSnooker ? "🔴" : isOneFifteen ? "🟡" : "🎱"}</span>
             </div>
 
             <div className="space-y-2">
@@ -144,7 +145,7 @@ export function MatchmakingOverlay({
                 جاري البحث عن منافس متكافئ...
               </h2>
               <p className="text-xs font-bold text-slate-400">
-                {isSnooker ? "سنوكر إنجليزي 🔴" : "بلياردو 8-Ball 🎱"} • الرهان:{" "}
+                {isSnooker ? "سنوكر إنجليزي 🔴" : isOneFifteen ? "بلياردو (1 و 15) 🟡" : "بلياردو 8-Ball 🎱"} • الرهان:{" "}
                 <span className="text-amber-400">{stake.toLocaleString()} 🪙</span> • الجائزة:{" "}
                 <span className="text-emerald-400">{prize.toLocaleString()} 🪙</span>
               </p>

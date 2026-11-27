@@ -3,6 +3,8 @@ import {
   BallGroup,
   DEFAULT_TABLE_GEOMETRY,
   GameMode,
+  ONE_FIFTEEN_POCKET_1,
+  ONE_FIFTEEN_POCKET_15,
   SNOOKER_COLOR_META,
   TableGeometry,
   getBreakLineX,
@@ -15,6 +17,7 @@ export interface ShotOutcomeContext {
   mode: GameMode;
   isPractice: boolean;
   soundEnabled: boolean;
+  wasBreakShot?: boolean;
   tableGeom?: TableGeometry;
   balls: Ball[];
   pottedList: { ball: Ball; pocketId: number }[];
@@ -48,6 +51,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     mode,
     isPractice,
     soundEnabled,
+    wasBreakShot = false,
     tableGeom = DEFAULT_TABLE_GEOMETRY,
     balls,
     pottedList,
@@ -64,7 +68,9 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     onMessage,
   } = ctx;
 
-  if (mode === "8-ball") {
+  if (mode === "8-ball" || mode === "one-fifteen") {
+    const isOneFifteen = mode === "one-fifteen";
+    const baulkLineMaxX = isOneFifteen ? getBreakLineX("one-fifteen", tableGeom) : undefined;
     const shooterGroup = activeShooter === "human" ? humanGroup : botGroup;
     const remainingTargetBalls = balls.filter(
       (b) =>
@@ -73,7 +79,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
         (shooterGroup === "solids" ? b.type === "solid" : b.type === "stripe")
     );
 
-    // 1. Check 8-Ball Potting
+    // 1. Check 8-Ball Potting (Break win if potted cleanly on the first break shot!)
     const black8Entry = pottedList.find((item) => item.ball.number === 8);
     if (black8Entry) {
       if (cueScratched) {
@@ -82,6 +88,15 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
           activeShooter === "human"
             ? "❌ خسرت المباراة! أسقطت الكرة البيضاء مع الكرة السوداء رقم 8."
             : "🎉 مبروك الفوز! الخصم أسقط الكرة البيضاء مع الكرة السوداء 8."
+        );
+        return;
+      }
+      if (wasBreakShot) {
+        onGameOver(
+          activeShooter,
+          activeShooter === "human"
+            ? "🏆 ضربة كسرة أسطورية! أسقطت الكرة السوداء 8 من الكسرة الأولى — مبروك الفوز!"
+            : "🤖 الخصم أسقط الكرة السوداء 8 من الكسرة الأولى وفاز بالمباراة!"
         );
         return;
       }
@@ -94,7 +109,10 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
         );
         return;
       }
-      if (targetPocketForThisShot !== null && black8Entry.pocketId !== targetPocketForThisShot) {
+      if (
+        (isOneFifteen && targetPocketForThisShot === null) ||
+        (targetPocketForThisShot !== null && black8Entry.pocketId !== targetPocketForThisShot)
+      ) {
         onGameOver(
           activeShooter === "human" ? "bot" : "human",
           activeShooter === "human"
@@ -150,40 +168,74 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
 
     if (foulOccurred) {
       if (soundEnabled) playFoulBuzzer();
+      if (isOneFifteen) {
+        for (const entry of pottedList) {
+          if (entry.ball.number !== 8) respotBall(entry.ball, balls, tableGeom);
+        }
+      }
       if (!isPractice) {
         const nextTurn = activeShooter === "human" ? "bot" : "human";
         if (nextTurn === "human") {
-          const freePos = findFreeCueBallPos(balls, tableGeom);
+          const freePos = findFreeCueBallPos(balls, tableGeom, baulkLineMaxX);
           onTurnChange("human");
           onBallInHand(freePos);
-          onMessage(`✋ فاول على الخصم (${foulReason}): اسحب الكرة البيضاء وضعها!`);
+          onMessage(
+            isOneFifteen
+              ? `✋ فاول على الخصم (${foulReason}): ضع الكرة البيضاء خلف خط البداية!`
+              : `✋ فاول على الخصم (${foulReason}): اسحب الكرة البيضاء وضعها!`
+          );
         } else {
           // Ensure cue ball is safely placed on table immediately before Bot shoots
-          placeCueBallSafely(balls, tableGeom);
+          placeCueBallSafely(balls, tableGeom, baulkLineMaxX);
           onBallInHand(null);
           onTurnChange("bot");
           onMessage(`⚠️ فاول عليك (${foulReason}): دور الخصم.`);
         }
       } else {
-        const freePos = findFreeCueBallPos(balls, tableGeom);
+        const freePos = findFreeCueBallPos(balls, tableGeom, baulkLineMaxX);
         onBallInHand(freePos);
-        onMessage(`✋ فاول (${foulReason}): ضع الكرة البيضاء!`);
+        onMessage(
+          isOneFifteen
+            ? `✋ فاول (${foulReason}): ضع الكرة البيضاء خلف خط البداية!`
+            : `✋ فاول (${foulReason}): ضع الكرة البيضاء!`
+        );
       }
       return;
     }
 
-    // 3. Open Pockets / Called Pocket check for regular balls
+    // 3. Open Pockets / Called Pocket & Special 1 & 15 Pocket Checks
     let updatedHumanGroup = humanGroup;
     let updatedBotGroup = botGroup;
-    const validPocketEntries =
-      targetPocketForThisShot !== null
-        ? pottedList.filter((entry) => entry.pocketId === targetPocketForThisShot)
-        : pottedList;
+
+    const isEntryPocketLegal = (entry: { ball: Ball; pocketId: number }): boolean => {
+      if (isOneFifteen) {
+        if (entry.ball.number === 1) {
+          if (entry.pocketId !== ONE_FIFTEEN_POCKET_1) return false;
+          return wasBreakShot || targetPocketForThisShot === ONE_FIFTEEN_POCKET_1;
+        }
+        if (entry.ball.number === 15) {
+          if (entry.pocketId !== ONE_FIFTEEN_POCKET_15) return false;
+          return wasBreakShot || targetPocketForThisShot === ONE_FIFTEEN_POCKET_15;
+        }
+        if (wasBreakShot) return true;
+        return targetPocketForThisShot !== null && entry.pocketId === targetPocketForThisShot;
+      }
+      return targetPocketForThisShot === null || entry.pocketId === targetPocketForThisShot;
+    };
+
+    const validPocketEntries = pottedList.filter(isEntryPocketLegal);
+    const invalidPocketEntries = pottedList.filter((entry) => !isEntryPocketLegal(entry));
+
+    // In 1 & 15, any uncalled or wrong-pocket potted ball returns to the table!
+    if (isOneFifteen && invalidPocketEntries.length > 0) {
+      for (const bad of invalidPocketEntries) {
+        respotBall(bad.ball, balls, tableGeom);
+      }
+    }
+
     const legalPottedBalls = validPocketEntries.map((entry) => entry.ball);
     const pottedInWrongPocket =
-      targetPocketForThisShot !== null &&
-      pottedList.length > 0 &&
-      validPocketEntries.length === 0;
+      pottedList.length > 0 && invalidPocketEntries.length > 0 && validPocketEntries.length === 0;
 
     if (humanGroup === "unassigned" && legalPottedBalls.length > 0) {
       const firstLegal = legalPottedBalls.find((b) => b.type === "solid" || b.type === "stripe");
@@ -252,11 +304,19 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       const nextT = activeShooter === "human" ? "bot" : "human";
       onTurnChange(nextT);
       if (pottedInWrongPocket) {
-        onMessage(
-          nextT === "human"
-            ? "🎯 الخصم أخطأ الجيب المحدد! دورك الآن."
-            : "🎯 الكرة سقطت في جيب غير الجيب المحدد! دور الخصم."
-        );
+        if (isOneFifteen) {
+          onMessage(
+            nextT === "human"
+              ? "🎯 الخصم أخطأ الجيب! خرجت الكرة ودورك الآن."
+              : "🎯 لم تحدد الجيب الصحيح! خرجت الكرة وانتقل الدور للخصم."
+          );
+        } else {
+          onMessage(
+            nextT === "human"
+              ? "🎯 الخصم أخطأ الجيب المحدد! دورك الآن."
+              : "🎯 الكرة سقطت في جيب غير الجيب المحدد! دور الخصم."
+          );
+        }
       } else if (nextT === "human") {
         onMessage(
           remainingHumanAfter.length === 0 && updatedHumanGroup !== "unassigned"
@@ -267,7 +327,11 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
         onMessage("دور الخصم الآن...");
       }
     } else if (pottedInWrongPocket) {
-      onMessage("🎯 الكرة سقطت في جيب غير الجيب المحدد!");
+      onMessage(
+        isOneFifteen
+          ? "🎯 لم تحدد الجيب الصحيح! خرجت الكرة للطاولة."
+          : "🎯 الكرة سقطت في جيب غير الجيب المحدد!"
+      );
     }
   } else {
     // Snooker mode

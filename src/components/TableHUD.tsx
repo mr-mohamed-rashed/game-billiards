@@ -79,6 +79,7 @@ interface TableHUDProps {
   calledPocketId: number | null;
   isPortrait: boolean;
   isVirtualLandscape: boolean;
+  slowMoEnabled: boolean;
   onSpinPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   onSpinPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
   onSpinPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
@@ -86,6 +87,7 @@ interface TableHUDProps {
   onResetSpin: () => void;
   onFineAim: (delta: number) => void;
   onSelectPocket: (pocketId: number) => void;
+  onToggleSlowMo: () => void;
   onOpenShop: () => void;
   onToggleVirtualLandscape: () => void;
   onExit: () => void;
@@ -121,6 +123,7 @@ export function TableHUD({
   calledPocketId,
   isPortrait,
   isVirtualLandscape,
+  slowMoEnabled,
   onSpinPointerDown,
   onSpinPointerMove,
   onSpinPointerUp,
@@ -128,6 +131,7 @@ export function TableHUD({
   onResetSpin,
   onFineAim,
   onSelectPocket,
+  onToggleSlowMo,
   onOpenShop,
   onToggleVirtualLandscape,
   onExit,
@@ -310,8 +314,8 @@ export function TableHUD({
           </button>
         </div>
 
-        {/* Call Pocket Quick Selector (8-ball) or Snooker Color Values Strip */}
-        {mode === "8-ball" ? (
+        {/* Call Pocket Quick Selector (8-ball & 1-15) or Snooker Color Values Strip */}
+        {mode !== "snooker" ? (
           <div className="relative">
             <button
               type="button"
@@ -420,6 +424,19 @@ export function TableHUD({
           borderColorClass="border-slate-700"
         />
 
+        <button
+          type="button"
+          onClick={onToggleSlowMo}
+          className={`h-7 sm:h-8 px-1.5 sm:px-2 rounded-lg border flex items-center justify-center gap-1 text-[10px] font-black cursor-pointer transition-all active:scale-95 ${
+            slowMoEnabled
+              ? "bg-cyan-500/20 hover:bg-cyan-500/35 border-cyan-400/70 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.2)]"
+              : "bg-slate-900/90 hover:bg-slate-800 border-slate-700 text-slate-500 line-through"
+          }`}
+          title={slowMoEnabled ? "التصوير البطيء: مفعل (اضغط للإيقاف)" : "التصوير البطيء: مغلق (اضغط للتفعيل)"}
+        >
+          <span>🎬</span>
+          <span className="hidden lg:inline">{slowMoEnabled ? "سلو موشن" : "سلو"}</span>
+        </button>
         <button
           type="button"
           onClick={onOpenShop}

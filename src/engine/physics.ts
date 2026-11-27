@@ -6,6 +6,8 @@ import {
   BallGroup,
   DEFAULT_TABLE_GEOMETRY,
   GameMode,
+  ONE_FIFTEEN_POCKET_1,
+  ONE_FIFTEEN_POCKET_15,
   Pocket,
   SNOOKER_COLOR_ORDER,
   SnookerTargetInfo,
@@ -183,7 +185,7 @@ export function initBallsRack(
     sz: 0,
   });
 
-  if (mode === "8-ball") {
+  if (mode === "8-ball" || mode === "one-fifteen") {
     const RACK_NUMBERS = [1, 9, 2, 3, 8, 10, 11, 4, 12, 5, 13, 6, 14, 7, 15];
     const apexX = tableLeft + (tableRight - tableLeft) * 0.72;
     const spacing = ballRadius * 2.04;
@@ -362,7 +364,7 @@ export function getCueForceMultiplier(cue: CueItem): number {
 }
 
 export interface StepPhysicsCallbacks {
-  onPotentialCinematic: (pocket: Pocket, ball: Ball) => void;
+  onPotentialCinematic: (pocket: Pocket, ball: Ball, reason: string) => void;
   onPocketed: (ball: Ball, pocketId: number) => void;
   onFirstBallHit: (target: Ball) => void;
 }
@@ -494,7 +496,10 @@ export function stepPhysics({
         ball.y = bounds.minY;
         ball.vy = Math.abs(ball.vy) * CUSHION_BOUNCE;
         applyRailSpin(0, 1);
-        if (soundEnabled && speed > 1.0) playBallClack(speed);
+        if (speed > 1.0) {
+          ball.railBounces = (ball.railBounces || 0) + 1;
+          if (soundEnabled) playBallClack(speed);
+        }
       }
       if (
         ball.y > bounds.maxY &&
@@ -504,19 +509,28 @@ export function stepPhysics({
         ball.y = bounds.maxY;
         ball.vy = -Math.abs(ball.vy) * CUSHION_BOUNCE;
         applyRailSpin(0, -1);
-        if (soundEnabled && speed > 1.0) playBallClack(speed);
+        if (speed > 1.0) {
+          ball.railBounces = (ball.railBounces || 0) + 1;
+          if (soundEnabled) playBallClack(speed);
+        }
       }
       if (ball.x < bounds.minX && ball.y > railSpans.leftTopEndY && ball.y < railSpans.leftBotStartY) {
         ball.x = bounds.minX;
         ball.vx = Math.abs(ball.vx) * CUSHION_BOUNCE;
         applyRailSpin(1, 0);
-        if (soundEnabled && speed > 1.0) playBallClack(speed);
+        if (speed > 1.0) {
+          ball.railBounces = (ball.railBounces || 0) + 1;
+          if (soundEnabled) playBallClack(speed);
+        }
       }
       if (ball.x > bounds.maxX && ball.y > railSpans.rightTopEndY && ball.y < railSpans.rightBotStartY) {
         ball.x = bounds.maxX;
         ball.vx = -Math.abs(ball.vx) * CUSHION_BOUNCE;
         applyRailSpin(-1, 0);
-        if (soundEnabled && speed > 1.0) playBallClack(speed);
+        if (speed > 1.0) {
+          ball.railBounces = (ball.railBounces || 0) + 1;
+          if (soundEnabled) playBallClack(speed);
+        }
       }
 
       // Pocket Jaw Knuckle Bumpers (realistic angled rebounds at pocket corners)
@@ -536,7 +550,10 @@ export function stepPhysics({
             if (vn < 0) {
               ball.vx -= (1 + CUSHION_BOUNCE) * vn * nx;
               ball.vy -= (1 + CUSHION_BOUNCE) * vn * ny;
-              if (soundEnabled && Math.abs(vn) > 1.0) playBallClack(Math.abs(vn));
+              if (Math.abs(vn) > 1.0) {
+                ball.railBounces = (ball.railBounces || 0) + 1;
+                if (soundEnabled) playBallClack(Math.abs(vn));
+              }
             }
           }
         }
@@ -554,12 +571,6 @@ export function stepPhysics({
           const pull = funnelPullBase * (1 - dist / funnelRadius) * effectiveScale;
           ball.vx += (dx / dist) * pull;
           ball.vy += (dy / dist) * pull;
-        }
-
-        const isTargetOrEight =
-          (activeShotCalledPocketId !== null && p.id === activeShotCalledPocketId) || ball.number === 8;
-        if (dist < p.r + 16 && dist > p.r - 4 && speed > 1.8 && isTargetOrEight && ball.type !== "cue") {
-          callbacks.onPotentialCinematic(p, ball);
         }
 
         if (dist < p.r + pocketDropBonus) {
@@ -745,6 +756,49 @@ export function stepPhysics({
     }
   }
 
+  // Detect dramatic object-ball approach toward a pocket (triggers even if it ends up missing/lipping out)
+  if (anyMoving) {
+    for (let i = 1; i < ballCount; i++) {
+      const ball = balls[i];
+      if (ball.isPotted || ball.type === "cue") continue;
+      const spd = Math.hypot(ball.vx, ball.vy);
+      if (spd < 1.5 || spd > 26) continue;
+      const ux = ball.vx / spd;
+      const uy = ball.vy / spd;
+
+      for (let pi = 0; pi < pockets.length; pi++) {
+        const p = pockets[pi];
+        const dx = p.x - ball.x;
+        const dy = p.y - ball.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist <= p.r + 10 || dist > 160) continue;
+
+        const alignDot = (ux * dx + uy * dy) / dist;
+        if (alignDot < 0.935) continue;
+
+        const isCalledPocket = activeShotCalledPocketId !== null && p.id === activeShotCalledPocketId;
+        const isBankShot = (ball.railBounces || 0) >= 1;
+        const isEightBall = ball.number === 8;
+        const isSnookerFinal = ball.type === "color" && (ball.value === 7 || ball.value === 6);
+
+        if (!isSegmentClear(ball.x, ball.y, p.x, p.y, balls, new Set([ball.id]), ball.radius * 0.85)) {
+          continue;
+        }
+
+        const reason = isEightBall
+          ? "eight"
+          : isBankShot
+          ? "bank"
+          : isCalledPocket
+          ? "called"
+          : isSnookerFinal
+          ? "snooker_final"
+          : "approach";
+        callbacks.onPotentialCinematic(p, ball, reason);
+      }
+    }
+  }
+
   return anyMoving;
 }
 
@@ -799,12 +853,13 @@ export function computeBotShot(
 
   const candidateBalls = balls.filter((b) => {
     if (b.isPotted || b.type === "cue") return false;
-    if (mode === "8-ball" && botGroup !== "unassigned") {
+    const isPool = mode === "8-ball" || mode === "one-fifteen";
+    if (isPool && botGroup !== "unassigned") {
       const botType = botGroup === "solids" ? "solid" : "stripe";
       const botBallsLeft = balls.some((x) => !x.isPotted && x.number !== 8 && x.type === botType);
       return botBallsLeft ? b.type === botType : b.number === 8;
     }
-    if (mode === "8-ball") return b.number !== 8;
+    if (isPool) return b.number !== 8;
     if (mode === "snooker" && snookerTarget) {
       if (snookerTarget.phase === "red") return b.type === "red";
       if (snookerTarget.phase === "color") return b.type === "color";
@@ -825,6 +880,10 @@ export function computeBotShot(
 
     for (let pi = 0; pi < pockets.length; pi++) {
       const p = pockets[pi];
+      if (mode === "one-fifteen") {
+        if (target.number === 1 && p.id !== ONE_FIFTEEN_POCKET_1) continue;
+        if (target.number === 15 && p.id !== ONE_FIFTEEN_POCKET_15) continue;
+      }
       const toPx = p.x - target.x;
       const toPy = p.y - target.y;
       const distBP = Math.hypot(toPx, toPy);
@@ -878,11 +937,16 @@ export function computeBotShot(
       const d2 = Math.hypot(curr.x - cueBall.x, curr.y - cueBall.y);
       return d1 < d2 ? prev : curr;
     });
-    const bestPocket = pockets.reduce((prev, curr) => {
-      const d1 = Math.hypot(prev.x - closest.x, prev.y - closest.y);
-      const d2 = Math.hypot(curr.x - closest.x, curr.y - closest.y);
-      return d1 < d2 ? prev : curr;
-    });
+    const bestPocket =
+      mode === "one-fifteen" && closest.number === 1
+        ? pockets[ONE_FIFTEEN_POCKET_1]
+        : mode === "one-fifteen" && closest.number === 15
+        ? pockets[ONE_FIFTEEN_POCKET_15]
+        : pockets.reduce((prev, curr) => {
+            const d1 = Math.hypot(prev.x - closest.x, prev.y - closest.y);
+            const d2 = Math.hypot(curr.x - closest.x, curr.y - closest.y);
+            return d1 < d2 ? prev : curr;
+          });
     return {
       angle: Math.atan2(closest.y - cueBall.y, closest.x - cueBall.x),
       pocketId: bestPocket.id,

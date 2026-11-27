@@ -46,6 +46,11 @@ import { TableHUD } from "@/components/TableHUD";
 import { PowerMeter } from "@/components/PowerMeter";
 import { TableEntranceOverlay } from "@/components/TableEntranceOverlay";
 
+const HAND_OPEN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M10.5 13V6.5a1.5 1.5 0 0 1 3 0V12m0-6.5a1.5 1.5 0 0 1 3 0V12m0-5a1.5 1.5 0 0 1 3 0v6.5m0-4.5a1.5 1.5 0 0 1 3 0v7.2c0 4.3-3.1 7.8-7.5 7.8-3.4 0-5.7-1.9-7.4-4.8l-2.3-3.8a1.4 1.4 0 0 1 2.2-1.7L9 14.8V13Z" fill="#ffffff" stroke="#0f172a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const HAND_GRAB_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M8.5 14.5v-3a1.5 1.5 0 0 1 3 0v1m0-2a1.5 1.5 0 0 1 3 0v2m0-1.5a1.5 1.5 0 0 1 3 0v2m0-.5a1.5 1.5 0 0 1 3 0v4.8c0 4-3 7.2-7 7.2-3.2 0-5.5-1.8-6.8-4.5l-1.5-3.2a1.4 1.4 0 0 1 2.3-1.5l1.5 1.7Z" fill="#fde047" stroke="#0f172a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const CURSOR_HAND_OPEN = `url("data:image/svg+xml,${encodeURIComponent(HAND_OPEN_SVG)}") 14 14, grab`;
+const CURSOR_HAND_GRAB = `url("data:image/svg+xml,${encodeURIComponent(HAND_GRAB_SVG)}") 14 14, grabbing`;
+
 export default function BilliardsStandalonePage() {
   return (
     <Suspense
@@ -96,6 +101,7 @@ function CueMasterApp() {
   // Settings
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [aimAssistLong, setAimAssistLong] = useState(true);
+  const [slowMoEnabled, setSlowMoEnabled] = useState(true);
 
   // Match State
   const [mode, setMode] = useState<GameMode>(initialMode);
@@ -154,6 +160,7 @@ function CueMasterApp() {
   const isAimDraggingRef = useRef(false);
   const isDraggingBallInHandRef = useRef(false);
   const isDraggingBreakCueRef = useRef(false);
+  const isHoveringBreakCueRef = useRef(false);
   const isSpinDraggingRef = useRef(false);
   const isVerticalMeterDraggingRef = useRef(false);
   const aimAngleRef = useRef(0);
@@ -168,6 +175,7 @@ function CueMasterApp() {
   const botAimVisibleRef = useRef(false);
   const isBallInHandRef = useRef(false);
   const isBreakShotRef = useRef(true);
+  const wasBreakShotRef = useRef(false);
   const ballInHandHoverPosRef = useRef<{ x: number; y: number } | null>(null);
   const turnRef = useRef<"human" | "bot">("human");
   const humanGroupRef = useRef<BallGroup>("unassigned");
@@ -177,6 +185,7 @@ function CueMasterApp() {
   const snookerOnColorAfterRedRef = useRef(false);
   const soundEnabledRef = useRef(true);
   const aimAssistLongRef = useRef(true);
+  const slowMoEnabledRef = useRef(true);
   const selectedCueRef = useRef("cue_maple_standard");
   const selectedTableRef = useRef("classic");
   const modeRef = useRef<GameMode>(initialMode);
@@ -187,6 +196,9 @@ function CueMasterApp() {
   const cinematicCamRef = useRef<CinematicCamState | null>(null);
   const cinematicTriggeredThisShotRef = useRef(false);
   const cinematicTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slowMoScaleRef = useRef(1.0);
+  const slowMoTargetScaleRef = useRef(1.0);
+  const shotsSinceSlowMoRef = useRef(3);
   const shotStartPosRef = useRef({ x: 200, y: 225 });
   const firstBallHitInShotRef = useRef<Ball | null>(null);
   const pottedInCurrentShotRef = useRef<{ ball: Ball; pocketId: number }[]>([]);
@@ -195,6 +207,7 @@ function CueMasterApp() {
   // Sync React state -> refs
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { aimAssistLongRef.current = aimAssistLong; }, [aimAssistLong]);
+  useEffect(() => { slowMoEnabledRef.current = slowMoEnabled; }, [slowMoEnabled]);
   useEffect(() => { selectedCueRef.current = selectedCue; }, [selectedCue]);
   useEffect(() => { selectedTableRef.current = selectedTable; }, [selectedTable]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
@@ -238,6 +251,12 @@ function CueMasterApp() {
       if (sUnlCues) setUnlockedCues(JSON.parse(sUnlCues));
       const sUnlTables = localStorage.getItem("cuemaster_unlocked_tables");
       if (sUnlTables) setUnlockedTables(JSON.parse(sUnlTables));
+      const sSlowMo = localStorage.getItem("cuemaster_slowmo_enabled");
+      if (sSlowMo !== null) {
+        const parsed = sSlowMo !== "false";
+        setSlowMoEnabled(parsed);
+        slowMoEnabledRef.current = parsed;
+      }
     } catch {}
 
     const updateOrientation = () => {
@@ -315,7 +334,10 @@ function CueMasterApp() {
   const handleTurnTimeout = () => {
     if (soundEnabledRef.current) playFoulBuzzer();
     const activeGeom = getActiveGeom();
-    const baulkMaxX = modeRef.current === "snooker" ? getBreakLineX("snooker", activeGeom) : undefined;
+    const baulkMaxX =
+      modeRef.current === "snooker" || modeRef.current === "one-fifteen"
+        ? getBreakLineX(modeRef.current, activeGeom)
+        : undefined;
     isBreakShotRef.current = false;
     isDraggingBreakCueRef.current = false;
     setIsBreakShot(false);
@@ -333,7 +355,7 @@ function CueMasterApp() {
         turnRef.current = "human";
         setTurn("human");
         setTurnMessage(
-          modeRef.current === "snooker"
+          baulkMaxX !== undefined
             ? "⏱️ انتهى وقت الخصم! ضع الكرة البيضاء خلف الخط 🧤"
             : "⏱️ انتهى وقت الخصم! الفاول لصالحك، اسحب الكرة البيضاء 🧤"
         );
@@ -397,9 +419,12 @@ function CueMasterApp() {
     setTurn("human");
     setTurnMessage(
       currentMode === "snooker"
-        ? "🔴 ضربة البداية: حرّك الكرة البيضاء خلف الخط وصوّب على المثلث!"
-        : "🎱 ضربة البداية: حرّك الكرة البيضاء خلف الخط وصوّب على المثلث!"
+        ? "🔴 ضربة البداية: حرّك الكرة البيضاء باليد خلف الخط وصوّب على المثلث!"
+        : currentMode === "one-fifteen"
+        ? "🟡 1 و 15: حرّك الكرة البيضاء باليد خلف الخط واضرب المثلث!"
+        : "🎱 ضربة البداية: حرّك الكرة البيضاء باليد خلف الخط وصوّب على المثلث!"
     );
+    wasBreakShotRef.current = false;
     setIsBallInHand(false);
     setIsBreakShot(true);
     setIsShooting(false);
@@ -409,6 +434,10 @@ function CueMasterApp() {
     firstBallHitInShotRef.current = null;
     pottedInCurrentShotRef.current = [];
     cueScratchedInShotRef.current = false;
+    isHoveringBreakCueRef.current = false;
+    shotsSinceSlowMoRef.current = 3;
+    slowMoScaleRef.current = 1.0;
+    slowMoTargetScaleRef.current = 1.0;
   };
 
   const triggerGameOver = (winner: "human" | "bot", message: string) => {
@@ -492,6 +521,7 @@ function CueMasterApp() {
         clearTimeout(cinematicTimerRef.current);
         cinematicTimerRef.current = null;
       }
+      slowMoTargetScaleRef.current = 1.0;
       if (cinematicCamRef.current) {
         cinematicCamRef.current = null;
         setCinematicCam(null);
@@ -505,9 +535,26 @@ function CueMasterApp() {
       lastFrameTime = now;
       const dtNorm = Math.min(2.2, Math.max(0.2, rawDt / 16.6667));
 
+      // Smoothly interpolate real-time slow-motion scale (0.20 slow-mo <-> 1.0 normal)
+      const targetScale = slowMoEnabledRef.current ? slowMoTargetScaleRef.current : 1.0;
+      const lerpRate = targetScale < slowMoScaleRef.current ? 0.22 : 0.085;
+      slowMoScaleRef.current += (targetScale - slowMoScaleRef.current) * lerpRate;
+      if (Math.abs(slowMoScaleRef.current - targetScale) < 0.005) {
+        slowMoScaleRef.current = targetScale;
+      }
+      const slowMoIntensity = Math.max(0, Math.min(1, (1 - slowMoScaleRef.current) / 0.8));
+
+      // If featured ball slowed down or missed cleanly while in slow-mo, release smoothly
+      if (cinematicCamRef.current && slowMoTargetScaleRef.current < 1.0 && cinematicCamRef.current.ballId !== undefined) {
+        const feat = ballsRef.current.find((b) => b.id === cinematicCamRef.current?.ballId);
+        if (feat && !feat.isPotted && Math.hypot(feat.vx, feat.vy) < 0.4) {
+          slowMoTargetScaleRef.current = 1.0;
+        }
+      }
+
       const tableCfg = ALL_TABLES.find((t) => t.id === selectedTableRef.current) || ALL_TABLES[0];
       const activeCueObj = ALL_CUES.find((c) => c.id === selectedCueRef.current) || ALL_CUES[0];
-      const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current);
+      const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current, modeRef.current);
 
       renderTableScene({
         ctx,
@@ -522,6 +569,10 @@ function CueMasterApp() {
         isBotAiming: botAimVisibleRef.current,
         isBallInHand: isBallInHandRef.current,
         ballInHandHoverPos: ballInHandHoverPosRef.current,
+        isDraggingBall: isDraggingBallInHandRef.current || isDraggingBreakCueRef.current,
+        isHoveringBreakCue: isHoveringBreakCueRef.current,
+        slowMoCam: cinematicCamRef.current,
+        slowMoIntensity,
         calledPocketId: calledPocketIdRef.current,
         humanGroup: humanGroupRef.current,
         snookerTarget: getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current),
@@ -543,7 +594,7 @@ function CueMasterApp() {
       const anyMoving = stepPhysics({
         balls: ballsRef.current,
         dtNorm,
-        timeScale: cinematicCamRef.current ? 0.58 : 1.0,
+        timeScale: slowMoScaleRef.current,
         tableCfg,
         cueActive: activeCueObj,
         soundEnabled: soundEnabledRef.current,
@@ -554,25 +605,63 @@ function CueMasterApp() {
         spinAppliedRef: spinAppliedInCurrentShotRef,
         firstBallHitRef: firstBallHitInShotRef,
         callbacks: {
-          onPotentialCinematic: (pocket, ball) => {
-            if (cinematicTriggeredThisShotRef.current) return;
+          onPotentialCinematic: (pocket, ball, reason) => {
+            if (!slowMoEnabledRef.current || cinematicTriggeredThisShotRef.current) return;
+            if (wasBreakShotRef.current && ball.number !== 8) return;
+
             const shotDist = Math.hypot(
               shotStartPosRef.current.x - pocket.x,
               shotStartPosRef.current.y - pocket.y
             );
-            if (shotDist > 270 || ball.number === 8) {
-              cinematicTriggeredThisShotRef.current = true;
-              const camData: CinematicCamState = { active: true, pocket, ballNum: ball.number, ballColor: ball.color };
-              cinematicCamRef.current = camData;
-              setCinematicCam(camData);
-              if (soundEnabledRef.current) playCinematicWhoosh();
-              if (cinematicTimerRef.current) clearTimeout(cinematicTimerRef.current);
-              cinematicTimerRef.current = setTimeout(() => {
-                cinematicCamRef.current = null;
-                setCinematicCam(null);
-                cinematicTimerRef.current = null;
-              }, 520);
-            }
+            const isDecisive =
+              reason === "eight" ||
+              reason === "snooker_final" ||
+              (modeRef.current === "one-fifteen" && (ball.number === 1 || ball.number === 15));
+            const isSpecialPlay =
+              isDecisive ||
+              reason === "bank" ||
+              (reason === "called" && shotDist > 290) ||
+              shotDist > 375;
+
+            if (!isSpecialPlay) return;
+
+            const minShotsCooldown = isDecisive ? 1 : 3;
+            if (shotsSinceSlowMoRef.current < minShotsCooldown) return;
+
+            cinematicTriggeredThisShotRef.current = true;
+            shotsSinceSlowMoRef.current = 0;
+
+            const reasonLabel =
+              reason === "eight"
+                ? "🏆 الكرة الحاسمة 8"
+                : reason === "bank"
+                ? "🎯 ارتداد / بند رائع"
+                : reason === "snooker_final"
+                ? "👑 كرة الحسم النهائية"
+                : reason === "called"
+                ? "🎯 الجيب المحدد بدقة"
+                : "🔥 تسديدة بعيدة مميزة";
+
+            const camData: CinematicCamState = {
+              active: true,
+              pocket,
+              ballNum: ball.number,
+              ballId: ball.id,
+              ballColor: ball.color,
+              reason: reasonLabel,
+            };
+            cinematicCamRef.current = camData;
+            setCinematicCam(camData);
+            slowMoTargetScaleRef.current = 0.2;
+            if (soundEnabledRef.current) playCinematicWhoosh();
+
+            if (cinematicTimerRef.current) clearTimeout(cinematicTimerRef.current);
+            cinematicTimerRef.current = setTimeout(() => {
+              slowMoTargetScaleRef.current = 1.0;
+              cinematicCamRef.current = null;
+              setCinematicCam(null);
+              cinematicTimerRef.current = null;
+            }, 1300);
           },
           onPocketed: (ball, pocketId) => {
             if (ball.type === "cue") {
@@ -580,13 +669,14 @@ function CueMasterApp() {
             } else {
               pottedInCurrentShotRef.current.push({ ball, pocketId });
             }
-            if (cinematicCamRef.current) {
+            if (cinematicCamRef.current && cinematicCamRef.current.ballId === ball.id) {
               if (cinematicTimerRef.current) clearTimeout(cinematicTimerRef.current);
               cinematicTimerRef.current = setTimeout(() => {
+                slowMoTargetScaleRef.current = 1.0;
                 cinematicCamRef.current = null;
                 setCinematicCam(null);
                 cinematicTimerRef.current = null;
-              }, 180);
+              }, 340);
             }
           },
           onFirstBallHit: () => {},
@@ -596,6 +686,7 @@ function CueMasterApp() {
       if (isShootingRef.current && !anyMoving) {
         isShootingRef.current = false;
         setIsShooting(false);
+        shotsSinceSlowMoRef.current += 1;
         powerRef.current = 0;
         setPower(0);
         if (powerFillRef.current) powerFillRef.current.style.height = "0%";
@@ -621,6 +712,7 @@ function CueMasterApp() {
           mode: modeRef.current,
           isPractice: isPracticeRef.current,
           soundEnabled: soundEnabledRef.current,
+          wasBreakShot: wasBreakShotRef.current,
           tableGeom: tableCfg.geometry,
           balls: ballsRef.current,
           pottedList,
@@ -694,7 +786,9 @@ function CueMasterApp() {
   };
 
   const getBallInHandMaxX = () =>
-    modeRef.current === "snooker" ? getBreakLineX("snooker", getActiveGeom()) : undefined;
+    modeRef.current === "snooker" || modeRef.current === "one-fifteen"
+      ? getBreakLineX(modeRef.current, getActiveGeom())
+      : undefined;
 
   const tryPlaceBallInHand = (x: number, y: number) => {
     const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
@@ -722,6 +816,46 @@ function CueMasterApp() {
     return false;
   };
 
+  const syncCanvasCursor = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (isDraggingBallInHandRef.current || isDraggingBreakCueRef.current) {
+      canvas.style.cursor = CURSOR_HAND_GRAB;
+      return;
+    }
+    const canInteract = (turnRef.current === "human" || isPracticeRef.current) && !isShootingRef.current;
+    if (canInteract && (isBallInHandRef.current || isHoveringBreakCueRef.current)) {
+      canvas.style.cursor = CURSOR_HAND_OPEN;
+      return;
+    }
+    canvas.style.cursor = canInteract ? "crosshair" : "default";
+  };
+
+  useEffect(() => {
+    syncCanvasCursor();
+  }, [currentView, isBallInHand, isBreakShot, isShooting, turn, isPractice]);
+
+  const handleToggleSlowMo = () => {
+    setSlowMoEnabled((prev) => {
+      const next = !prev;
+      slowMoEnabledRef.current = next;
+      try { localStorage.setItem("cuemaster_slowmo_enabled", String(next)); } catch {}
+      if (!next) {
+        if (cinematicTimerRef.current) {
+          clearTimeout(cinematicTimerRef.current);
+          cinematicTimerRef.current = null;
+        }
+        slowMoScaleRef.current = 1.0;
+        slowMoTargetScaleRef.current = 1.0;
+        if (cinematicCamRef.current) {
+          cinematicCamRef.current = null;
+          setCinematicCam(null);
+        }
+      }
+      return next;
+    });
+  };
+
   const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const coords = getCanvasCoords(e.clientX, e.clientY);
     if (!coords) return;
@@ -729,6 +863,7 @@ function CueMasterApp() {
     if (isDraggingBreakCueRef.current && isBreakShotRef.current) {
       const geom = getActiveGeom();
       moveBreakCueBall(coords.x, coords.y, ballsRef.current, geom, getBreakLineX(modeRef.current, geom));
+      syncCanvasCursor();
       return;
     }
 
@@ -737,12 +872,25 @@ function CueMasterApp() {
         const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
         ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
       }
+      syncCanvasCursor();
       return;
     }
 
-    if ((turnRef.current !== "human" && !isPracticeRef.current) || isShootingRef.current) return;
+    if ((turnRef.current !== "human" && !isPracticeRef.current) || isShootingRef.current) {
+      isHoveringBreakCueRef.current = false;
+      syncCanvasCursor();
+      return;
+    }
 
     const cueBall = ballsRef.current[0];
+    if (isBreakShotRef.current && cueBall && !cueBall.isPotted) {
+      isHoveringBreakCueRef.current =
+        Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= Math.max(32, cueBall.radius * 3.4);
+    } else {
+      isHoveringBreakCueRef.current = false;
+    }
+    syncCanvasCursor();
+
     if (cueBall && (isAimDraggingRef.current || e.buttons === 1)) {
       aimAngleRef.current = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
     }
@@ -756,7 +904,7 @@ function CueMasterApp() {
     const coords = getCanvasCoords(e.clientX, e.clientY);
     if (!coords) return;
 
-    if (modeRef.current === "8-ball") {
+    if (modeRef.current === "8-ball" || modeRef.current === "one-fifteen") {
       const clickedPocket = getActiveGeom().pockets.find(
         (p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 38
       );
@@ -772,6 +920,7 @@ function CueMasterApp() {
       isDraggingBallInHandRef.current = true;
       const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
       ballInHandHoverPosRef.current = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
+      syncCanvasCursor();
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
       return;
     }
@@ -782,11 +931,13 @@ function CueMasterApp() {
         isBreakShotRef.current &&
         cueBall &&
         !cueBall.isPotted &&
-        Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= Math.max(24, cueBall.radius * 2.8)
+        Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= Math.max(32, cueBall.radius * 3.4)
       ) {
         isDraggingBreakCueRef.current = true;
+        isHoveringBreakCueRef.current = true;
         const geom = getActiveGeom();
         moveBreakCueBall(coords.x, coords.y, ballsRef.current, geom, getBreakLineX(modeRef.current, geom));
+        syncCanvasCursor();
         try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
         return;
       }
@@ -814,6 +965,7 @@ function CueMasterApp() {
       if (target) tryPlaceBallInHand(target.x, target.y);
     }
     isAimDraggingRef.current = false;
+    syncCanvasCursor();
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
   };
 
@@ -821,7 +973,16 @@ function CueMasterApp() {
     isAimDraggingRef.current = false;
     isDraggingBallInHandRef.current = false;
     isDraggingBreakCueRef.current = false;
+    isHoveringBreakCueRef.current = false;
+    syncCanvasCursor();
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+  };
+
+  const handleCanvasPointerLeave = () => {
+    if (!isDraggingBreakCueRef.current && !isDraggingBallInHandRef.current) {
+      isHoveringBreakCueRef.current = false;
+      syncCanvasCursor();
+    }
   };
 
   const applyPowerVisual = (pct: number) => {
@@ -905,7 +1066,9 @@ function CueMasterApp() {
   };
 
   const isHumanOnEightBall = () => {
-    if (modeRef.current !== "8-ball" || humanGroupRef.current === "unassigned") return false;
+    if ((modeRef.current !== "8-ball" && modeRef.current !== "one-fifteen") || humanGroupRef.current === "unassigned") {
+      return false;
+    }
     const expected = humanGroupRef.current === "solids" ? "solid" : "stripe";
     return !ballsRef.current.some((b) => !b.isPotted && b.number !== 8 && b.type === expected);
   };
@@ -915,7 +1078,7 @@ function CueMasterApp() {
     if (isShootingRef.current || isBallInHandRef.current) return;
     if (turnRef.current !== "human" && !isPracticeRef.current) return;
 
-    const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current);
+    const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current, modeRef.current);
     const mustCallPocket =
       isHumanOnEightBall() ||
       (modeRef.current === "8-ball" && !isBreakShotRef.current && matchDiff.requireCalledPocket);
@@ -941,7 +1104,10 @@ function CueMasterApp() {
     spinAppliedInCurrentShotRef.current = false;
     shotStartPosRef.current = { x: cueBall.x, y: cueBall.y };
     cinematicTriggeredThisShotRef.current = false;
+    isHoveringBreakCueRef.current = false;
+    for (let i = 0; i < ballsRef.current.length; i++) ballsRef.current[i].railBounces = 0;
 
+    wasBreakShotRef.current = isBreakShotRef.current;
     isBreakShotRef.current = false;
     isDraggingBreakCueRef.current = false;
     setIsBreakShot(false);
@@ -972,11 +1138,14 @@ function CueMasterApp() {
         const cueBall = ballsRef.current[0];
         if (!cueBall) return;
         const activeGeom = getActiveGeom();
-        const baulkMaxX = modeRef.current === "snooker" ? getBreakLineX("snooker", activeGeom) : undefined;
+        const baulkMaxX =
+          modeRef.current === "snooker" || modeRef.current === "one-fifteen"
+            ? getBreakLineX(modeRef.current, activeGeom)
+            : undefined;
         if (cueBall.isPotted) placeCueBallSafely(ballsRef.current, activeGeom, baulkMaxX);
 
         const snookerTarget = getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current);
-        const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current);
+        const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current, modeRef.current);
         const plan = computeBotShot(
           ballsRef.current,
           botGroupRef.current,
@@ -1033,10 +1202,14 @@ function CueMasterApp() {
             if (cancelled) return;
             botAimVisibleRef.current = false;
             powerRef.current = 0;
+            wasBreakShotRef.current = isBreakShotRef.current;
+            isBreakShotRef.current = false;
+            setIsBreakShot(false);
             activeShotAimAngleRef.current = plan.angle;
             spinAppliedInCurrentShotRef.current = false;
             shotStartPosRef.current = { x: cueBall.x, y: cueBall.y };
             cinematicTriggeredThisShotRef.current = false;
+            for (let i = 0; i < ballsRef.current.length; i++) ballsRef.current[i].railBounces = 0;
 
             isShootingRef.current = true;
             setIsShooting(true);
@@ -1231,6 +1404,7 @@ function CueMasterApp() {
             calledPocketId={calledPocketId}
             isPortrait={isPortrait}
             isVirtualLandscape={isVirtualLandscape}
+            slowMoEnabled={slowMoEnabled}
             onSpinPointerDown={(e) => {
               isSpinDraggingRef.current = true;
               try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
@@ -1257,6 +1431,7 @@ function CueMasterApp() {
               setCalledPocketId(id);
               setShowPocketPopover(false);
             }}
+            onToggleSlowMo={handleToggleSlowMo}
             onOpenShop={() => {
               setShopTab("cues");
               setActiveModal("shop");
@@ -1319,7 +1494,7 @@ function CueMasterApp() {
                   dir="rtl"
                   className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-blue-950/95 border border-blue-400 text-blue-100 px-3 py-1 rounded-full text-[10px] font-black shadow-lg pointer-events-none whitespace-nowrap"
                 >
-                  {mode === "snooker"
+                  {mode === "snooker" || mode === "one-fifteen"
                     ? "🧤 الكرة في يدك: ضعها في أي مكان خلف الخط ثم ارفع إصبعك"
                     : "🧤 الكرة في يدك: اسحبها على الطاولة ثم ارفع إصبعك"}
                 </div>
@@ -1330,7 +1505,7 @@ function CueMasterApp() {
                   dir="rtl"
                   className="absolute top-1.5 left-1/2 -translate-x-1/2 z-20 bg-cyan-950/90 border border-cyan-400/70 text-cyan-100 px-3 py-0.5 rounded-full text-[10px] font-black shadow-lg pointer-events-none whitespace-nowrap"
                 >
-                  ↔️ ضربة البداية: اسحب الكرة البيضاء خلف الخط وصوّب على المثلث
+                  🧤 ضربة البداية: حرّك الكرة البيضاء باليد خلف الخط وصوّب على المثلث
                 </div>
               )}
 
@@ -1347,17 +1522,19 @@ function CueMasterApp() {
                 <>
                   <div
                     dir="rtl"
-                    className="absolute top-0 left-0 right-0 z-30 h-7 bg-black/85 border-b border-amber-500/40 flex items-center justify-between px-4 pointer-events-none"
+                    className="absolute top-0 left-0 right-0 z-30 h-7 bg-gradient-to-b from-black/90 to-black/60 border-b border-cyan-400/40 flex items-center justify-between px-4 pointer-events-none"
                   >
-                    <span className="text-[10px] font-black text-red-500">🔴 لقطة قريبة</span>
-                    <span className="text-[10px] font-black text-amber-300">🎬 POCKET CAM</span>
+                    <span className="text-[10px] font-black text-cyan-300 animate-pulse">
+                      {cinematicCam.reason || "🔥 لقطة مميزة"}
+                    </span>
+                    <span className="text-[10px] font-black text-amber-300 tracking-wider">🎬 SLOW MOTION</span>
                     <span className="text-[10px] font-bold text-slate-300">{cinematicCam.pocket.name}</span>
                   </div>
                   <div
                     dir="rtl"
-                    className="absolute bottom-0 left-0 right-0 z-30 h-7 bg-black/85 border-t border-amber-500/40 flex items-center justify-between px-4 pointer-events-none"
+                    className="absolute bottom-0 left-0 right-0 z-30 h-7 bg-gradient-to-t from-black/90 to-black/60 border-t border-cyan-400/40 flex items-center justify-between px-4 pointer-events-none"
                   >
-                    <span className="text-[10px] font-black text-emerald-400">🎯 SLOW MOTION</span>
+                    <span className="text-[10px] font-black text-emerald-400">⏱️ حركة بطيئة 0.2x</span>
                     <span className="text-[10px] font-mono text-amber-400 font-extrabold">
                       {cinematicCam.ballNum === 8 ? "🏆 الكرة 8!" : `كرة (${cinematicCam.ballNum})`}
                     </span>
@@ -1366,12 +1543,12 @@ function CueMasterApp() {
               )}
 
               <div
-                className="flex items-center justify-center transition-transform duration-300 ease-out will-change-transform"
+                className="flex items-center justify-center transition-transform duration-500 ease-out will-change-transform"
                 style={{
                   transformOrigin: cinematicCam
                     ? `${(cinematicCam.pocket.x / TABLE_WIDTH) * 100}% ${(cinematicCam.pocket.y / TABLE_HEIGHT) * 100}%`
                     : "50% 50%",
-                  transform: cinematicCam ? "scale(1.28)" : "scale(1)",
+                  transform: cinematicCam ? "scale(1.18)" : "scale(1)",
                 }}
               >
                 <canvas
@@ -1382,15 +1559,14 @@ function CueMasterApp() {
                   onPointerMove={handleCanvasPointerMove}
                   onPointerUp={handleCanvasPointerUp}
                   onPointerCancel={handleCanvasPointerCancel}
+                  onPointerLeave={handleCanvasPointerLeave}
                   style={{
                     width: canvasDisplaySize.w > 0 ? `${canvasDisplaySize.w}px` : "100%",
                     height: canvasDisplaySize.h > 0 ? `${canvasDisplaySize.h}px` : "auto",
                     borderColor: currentTable.cushionGlow,
                     boxShadow: `0 0 24px ${currentTable.cushionGlow}33, 0 8px 28px rgba(0,0,0,0.85)`,
                   }}
-                  className={`rounded-xl sm:rounded-2xl border-2 sm:border-4 touch-none select-none block ${
-                    isBallInHand ? "cursor-grab" : "cursor-crosshair"
-                  }`}
+                  className="rounded-xl sm:rounded-2xl border-2 sm:border-4 touch-none select-none block"
                 />
               </div>
             </main>
@@ -1454,6 +1630,7 @@ function CueMasterApp() {
             coins={coins}
             soundEnabled={soundEnabled}
             aimAssistLong={aimAssistLong}
+            slowMoEnabled={slowMoEnabled}
             currentTable={currentTable}
             activeCue={activeCue}
             mode={mode}
@@ -1461,6 +1638,7 @@ function CueMasterApp() {
             stake={stake}
             onToggleSound={() => setSoundEnabled(!soundEnabled)}
             onToggleAimAssist={() => setAimAssistLong(!aimAssistLong)}
+            onToggleSlowMo={handleToggleSlowMo}
             onOpenShop={() => setActiveModal("shop")}
             onCloseModal={() => setActiveModal(null)}
             onStartMatch={startMatch}

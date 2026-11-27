@@ -1,6 +1,9 @@
-export type GameMode = "8-ball" | "snooker";
+export type GameMode = "8-ball" | "snooker" | "one-fifteen";
 export type BallGroup = "unassigned" | "solids" | "stripes";
 export type ActiveModalType = "settings" | "shop" | "leaderboard" | "tournaments" | null;
+
+export const ONE_FIFTEEN_POCKET_1 = 1;  // أعلى وسط (شمال الكسرة)
+export const ONE_FIFTEEN_POCKET_15 = 4; // أسفل وسط (يمين الكسرة)
 
 export type SnookerTargetInfo =
   | { phase: "red" }
@@ -40,6 +43,8 @@ export interface Ball {
   sz: number;
   // Active Left/Right side English stored for cushion rebounds (- left, + right)
   spinSide?: number;
+  // Transient per-shot cushion/jaw bounce counter for detecting bank/special shots
+  railBounces?: number;
 }
 
 export interface Pocket {
@@ -75,7 +80,9 @@ export interface CinematicCamState {
   active: boolean;
   pocket: Pocket;
   ballNum: number;
+  ballId?: number;
   ballColor: string;
+  reason?: string;
 }
 
 export const TABLE_WIDTH = 900;
@@ -206,31 +213,36 @@ export interface MatchDifficulty {
   requireCalledPocket: boolean;
 }
 
-export function getMatchDifficulty(stake: number, isPractice: boolean): MatchDifficulty {
+export function getMatchDifficulty(
+  stake: number,
+  isPractice: boolean,
+  mode: GameMode = "8-ball"
+): MatchDifficulty {
+  const forceCall = mode === "one-fifteen";
   if (isPractice || stake <= 100) {
     return {
       id: "rookie",
       labelAr: isPractice ? "تدريب حر" : "مبتدئ",
-      aimLabelAr: "سهم كامل (100%)",
+      aimLabelAr: forceCall ? "سهم كامل + تحديد كل جيب" : "سهم كامل (100%)",
       badgeColor: "#22c55e",
       aimScale: 1.0,
       maxAimDistCap: 800,
       targetLineScale: 1.0,
       botAimError: 0.055,
-      requireCalledPocket: false,
+      requireCalledPocket: forceCall,
     };
   }
   if (stake <= 500) {
     return {
       id: "pro",
       labelAr: "محترفين",
-      aimLabelAr: "سهم متوسط (62%)",
+      aimLabelAr: forceCall ? "سهم متوسط + تحديد كل جيب" : "سهم متوسط (62%)",
       badgeColor: "#38bdf8",
       aimScale: 0.62,
       maxAimDistCap: 380,
       targetLineScale: 0.65,
       botAimError: 0.032,
-      requireCalledPocket: false,
+      requireCalledPocket: forceCall,
     };
   }
   if (stake <= 2500) {

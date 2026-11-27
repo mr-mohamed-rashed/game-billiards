@@ -10,6 +10,7 @@ interface GameModalsProps {
   coins: number;
   soundEnabled: boolean;
   aimAssistLong: boolean;
+  slowMoEnabled?: boolean;
   currentTable: TableItem;
   activeCue: CueItem;
   mode: GameMode;
@@ -17,6 +18,7 @@ interface GameModalsProps {
   stake: number;
   onToggleSound: () => void;
   onToggleAimAssist: () => void;
+  onToggleSlowMo?: () => void;
   onOpenShop: () => void;
   onCloseModal: () => void;
   onStartMatch: (mode: GameMode, practice: boolean, stake: number) => void;
@@ -31,6 +33,7 @@ export function GameModals({
   coins,
   soundEnabled,
   aimAssistLong,
+  slowMoEnabled = true,
   currentTable,
   activeCue,
   mode,
@@ -38,6 +41,7 @@ export function GameModals({
   stake,
   onToggleSound,
   onToggleAimAssist,
+  onToggleSlowMo,
   onOpenShop,
   onCloseModal,
   onStartMatch,
@@ -74,6 +78,18 @@ export function GameModals({
                   {aimAssistLong ? "متقدم (طويل)" : "قياسي"}
                 </button>
               </div>
+
+              {onToggleSlowMo && (
+                <div className="flex items-center justify-between">
+                  <span>التصوير البطيء (Slow Motion):</span>
+                  <button
+                    onClick={onToggleSlowMo}
+                    className={`px-3 py-1.5 rounded-xl text-xs cursor-pointer ${slowMoEnabled ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-slate-400"}`}
+                  >
+                    {slowMoEnabled ? "مفعل 🎬" : "مغلق"}
+                  </button>
+                </div>
+              )}
 
               <div className="flex items-center justify-between">
                 <span>الطاولة الحالية:</span>

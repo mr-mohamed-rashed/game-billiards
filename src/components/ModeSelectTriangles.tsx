@@ -69,8 +69,8 @@ export function ModeSelectTriangles({ onSelectMode }: ModeSelectTrianglesProps) 
         </h1>
       </div>
 
-      {/* Two Triangle Racks Side-by-Side (Compact on narrow mobile) */}
-      <div className="relative z-10 w-full max-w-3xl grid grid-cols-2 gap-3 sm:gap-6 items-stretch">
+      {/* Three Mode Cards Side-by-Side (Compact on narrow mobile) */}
+      <div className="relative z-10 w-full max-w-5xl grid grid-cols-3 gap-2 sm:gap-5 items-stretch">
         {/* Triangle 1: 8-Ball Billiards */}
         <button
           type="button"
@@ -181,6 +181,56 @@ export function ModeSelectTriangles({ onSelectMode }: ModeSelectTrianglesProps) 
               <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-amber-600 text-white font-black text-xs sm:text-sm shadow-lg">
                 <span>دخول السنوكر</span>
                 <span>🔴</span>
+              </span>
+            </div>
+          </div>
+        </button>
+
+        {/* Card 3: 1 & 15 Billiards */}
+        <button
+          type="button"
+          onClick={() => onSelectMode("one-fifteen")}
+          className="group relative flex flex-col items-center justify-between rounded-3xl border-2 border-amber-400/50 hover:border-yellow-300 bg-gradient-to-b from-amber-950/80 via-[#1d1106]/95 to-slate-950/95 p-3 sm:p-6 shadow-[0_12px_35px_rgba(245,158,11,0.28)] hover:shadow-[0_14px_45px_rgba(250,204,21,0.42)] active:scale-95 transition-all cursor-pointer"
+        >
+          <div className="w-full flex items-center justify-center py-1 sm:py-2">
+            <svg viewBox="0 0 240 165" className="w-full max-w-[205px] drop-shadow-[0_10px_20px_rgba(0,0,0,0.85)] group-hover:scale-105 transition-transform">
+              {/* Green Felt Backdrop Ring */}
+              <ellipse cx="120" cy="88" rx="92" ry="62" fill="rgba(6, 78, 59, 0.45)" stroke="#fbbf24" strokeWidth="3" strokeDasharray="6 4" />
+              {/* Ball 1 (Yellow Solid) */}
+              <g>
+                <circle cx="84" cy="92" r="34" fill="rgba(0,0,0,0.45)" />
+                <circle cx="82" cy="86" r="34" fill="#facc15" stroke="#fef08a" strokeWidth="2" />
+                <circle cx="82" cy="86" r="14" fill="#ffffff" />
+                <text x="82" y="92" textAnchor="middle" fontSize="18" fontWeight="900" fill="#0f172a">
+                  1
+                </text>
+                <ellipse cx="70" cy="70" rx="10" ry="6" transform="rotate(-25 70 70)" fill="rgba(255,255,255,0.55)" />
+              </g>
+              {/* Ball 15 (Maroon Stripe) */}
+              <g>
+                <circle cx="160" cy="92" r="34" fill="rgba(0,0,0,0.45)" />
+                <circle cx="158" cy="86" r="34" fill="#f8fafc" stroke="#fda4af" strokeWidth="2" />
+                <rect x="125" y="72" width="66" height="28" rx="10" fill="#831843" />
+                <circle cx="158" cy="86" r="14" fill="#ffffff" />
+                <text x="158" y="92" textAnchor="middle" fontSize="16" fontWeight="900" fill="#0f172a">
+                  15
+                </text>
+                <ellipse cx="146" cy="70" rx="10" ry="6" transform="rotate(-25 146 70)" fill="rgba(255,255,255,0.55)" />
+              </g>
+            </svg>
+          </div>
+
+          <div className="text-center space-y-1 mt-1">
+            <h2 className="text-base sm:text-2xl font-black text-amber-300 group-hover:text-white transition-colors">
+              بلياردو (1 و 15)
+            </h2>
+            <p className="text-[10px] sm:text-xs font-bold text-slate-300">
+              1 ميدل شمال • 15 ميدل يمين • تحديد كل جيب
+            </p>
+            <div className="pt-1.5">
+              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 text-white font-black text-xs sm:text-sm shadow-lg">
+                <span>دخول 1 و 15</span>
+                <span>🟡</span>
               </span>
             </div>
           </div>

@@ -4,7 +4,10 @@ import {
   Ball,
   BallGroup,
   CUSHION,
+  CinematicCamState,
   GameMode,
+  ONE_FIFTEEN_POCKET_1,
+  ONE_FIFTEEN_POCKET_15,
   SNOOKER_COLOR_META,
   SnookerTargetInfo,
   TABLE_HEIGHT,
@@ -83,6 +86,80 @@ function rayToCushion(
   return { dist: best, nx, ny };
 }
 
+function drawHandIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  isGrabbing: boolean
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 5;
+  ctx.shadowOffsetY = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 1.8;
+
+  if (isGrabbing) {
+    // Closed grabbing hand
+    ctx.beginPath();
+    ctx.roundRect(-7, -5, 14, 11, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    // Curled fingers
+    for (let f = -4.5; f <= 4.5; f += 3) {
+      ctx.beginPath();
+      ctx.roundRect(f - 1.4, -7.5, 2.8, 5, 1.4);
+      ctx.fill();
+      ctx.stroke();
+    }
+    // Thumb gripping from side
+    ctx.beginPath();
+    ctx.roundRect(-9.5, -2.5, 4.5, 6.5, 2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    // Open hand (5 fingers)
+    // Palm
+    ctx.beginPath();
+    ctx.roundRect(-6.5, -2.5, 13, 9.5, 3.5);
+    ctx.fill();
+    ctx.stroke();
+
+    // 4 upright fingers
+    const fingers = [
+      { fx: -5.0, top: -10.5 },
+      { fx: -1.8, top: -12.5 },
+      { fx: 1.5, top: -12.0 },
+      { fx: 4.8, top: -9.8 },
+    ];
+    for (let i = 0; i < fingers.length; i++) {
+      const f = fingers[i];
+      ctx.beginPath();
+      ctx.roundRect(f.fx - 1.35, f.top, 2.7, -f.top - 1, 1.35);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Thumb out to the left
+    ctx.beginPath();
+    ctx.moveTo(-6.2, 2);
+    ctx.lineTo(-10.5, -1.5);
+    ctx.lineTo(-8.5, -4);
+    ctx.lineTo(-5.2, -0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 export interface RenderSceneParams {
   ctx: CanvasRenderingContext2D;
   balls: Ball[];
@@ -96,6 +173,10 @@ export interface RenderSceneParams {
   isBotAiming?: boolean;
   isBallInHand: boolean;
   ballInHandHoverPos: { x: number; y: number } | null;
+  isDraggingBall?: boolean;
+  isHoveringBreakCue?: boolean;
+  slowMoCam?: CinematicCamState | null;
+  slowMoIntensity?: number;
   calledPocketId: number | null;
   humanGroup: BallGroup;
   snookerTarget?: SnookerTargetInfo;
@@ -126,6 +207,10 @@ export function renderTableScene({
   isBotAiming = false,
   isBallInHand,
   ballInHandHoverPos,
+  isDraggingBall = false,
+  isHoveringBreakCue = false,
+  slowMoCam = null,
+  slowMoIntensity = 0,
   calledPocketId,
   humanGroup,
   snookerTarget,
@@ -211,9 +296,9 @@ export function renderTableScene({
     }
   }
 
-  // Highlight legal behind-the-line zone on Break Shot (or Snooker Ball-in-Hand)
+  // Highlight legal behind-the-line zone on Break Shot (or Snooker / 1&15 Ball-in-Hand)
   if (
-    ((isBreakShot && !isShooting) || (isBallInHand && mode === "snooker")) &&
+    ((isBreakShot && !isShooting) || (isBallInHand && (mode === "snooker" || mode === "one-fifteen"))) &&
     (turn === "human" || isPractice)
   ) {
     ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
@@ -234,15 +319,53 @@ export function renderTableScene({
     ctx.restore();
   }
 
+  // 1 & 15 Fixed Middle Pocket Badges (Ball 1 -> Top Middle / شمال الكسرة, Ball 15 -> Bottom Middle / يمين الكسرة)
+  if (mode === "one-fifteen") {
+    const p1 = pockets[ONE_FIFTEEN_POCKET_1];
+    const p15 = pockets[ONE_FIFTEEN_POCKET_15];
+    if (p1) {
+      ctx.save();
+      ctx.fillStyle = "#facc15";
+      ctx.beginPath();
+      ctx.arc(p1.x, p1.y - 16, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "bold 9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("1", p1.x, p1.y - 15.5);
+      ctx.restore();
+    }
+    if (p15) {
+      ctx.save();
+      ctx.fillStyle = "#831843";
+      ctx.beginPath();
+      ctx.arc(p15.x, p15.y + 16, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 8px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("15", p15.x, p15.y + 16.5);
+      ctx.restore();
+    }
+  }
+
   // Check if human player is on the 8-ball
   const remainingHumanGroupBalls =
-    mode === "8-ball" && humanGroup !== "unassigned"
+    (mode === "8-ball" || mode === "one-fifteen") && humanGroup !== "unassigned"
       ? balls.filter(
           (b) => !b.isPotted && b.number !== 8 && (humanGroup === "solids" ? b.type === "solid" : b.type === "stripe")
         )
       : [];
   const humanOnEightBall =
-    mode === "8-ball" && humanGroup !== "unassigned" && remainingHumanGroupBalls.length === 0;
+    (mode === "8-ball" || mode === "one-fifteen") && humanGroup !== "unassigned" && remainingHumanGroupBalls.length === 0;
 
   // 2. Pocket Target Call Highlight (Ring aligned flush to exact outer black pocket rim)
   if (calledPocketId !== null) {
@@ -445,19 +568,17 @@ export function renderTableScene({
       );
     }
 
-    ctx.fillStyle = "rgba(59, 130, 246, 0.3)";
-    ctx.strokeStyle = "#3b82f6";
+    ctx.fillStyle = isDraggingBall ? "rgba(56, 189, 248, 0.34)" : "rgba(59, 130, 246, 0.24)";
+    ctx.strokeStyle = isDraggingBall ? "#38bdf8" : "#3b82f6";
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, ballRadius + 3, 0, Math.PI * 2);
+    ctx.arc(ballInHandHoverPos.x, ballInHandHoverPos.y, ballRadius + 3.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.font = "22px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("🧤", ballInHandHoverPos.x + 14, ballInHandHoverPos.y - 12);
+    drawHandIcon(ctx, ballInHandHoverPos.x + 14, ballInHandHoverPos.y - 12, isDraggingBall);
   }
 
   // 4b. Opening Break Shot Grab Halo around Cue Ball (lets player drag cue ball anywhere behind line)
@@ -471,16 +592,15 @@ export function renderTableScene({
     (turn === "human" || isPractice)
   ) {
     ctx.save();
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.9)";
-    ctx.lineWidth = 2;
+    const activeGrab = isDraggingBall || isHoveringBreakCue;
+    ctx.strokeStyle = activeGrab ? "rgba(250, 204, 21, 0.95)" : "rgba(56, 189, 248, 0.9)";
+    ctx.lineWidth = activeGrab ? 2.4 : 2;
     ctx.setLineDash([4, 3]);
     ctx.beginPath();
-    ctx.arc(cueBall.x, cueBall.y, ballRadius + 5, 0, Math.PI * 2);
+    ctx.arc(cueBall.x, cueBall.y, ballRadius + (activeGrab ? 6.5 : 5), 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.font = "13px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("↔️", cueBall.x, cueBall.y - ballRadius - 8);
+    drawHandIcon(ctx, cueBall.x, cueBall.y - ballRadius - 13, isDraggingBall);
     ctx.restore();
   }
 
@@ -534,7 +654,7 @@ export function renderTableScene({
     let isAimedTargetLegal = true;
     let warningText = "";
 
-    if (hitBall && mode === "8-ball" && !isBotAiming) {
+    if (hitBall && (mode === "8-ball" || mode === "one-fifteen") && !isBotAiming) {
       if (humanGroup === "unassigned") {
         if (hitBall.number === 8) {
           isAimedTargetLegal = false;
@@ -549,6 +669,13 @@ export function renderTableScene({
       } else if (hitBall.number !== 8) {
         isAimedTargetLegal = false;
         warningText = "⚠️ فاول: هدفك الكرة 8!";
+      }
+      if (isAimedTargetLegal && mode === "one-fifteen" && !isBreakShot) {
+        if (hitBall.number === 1 && calledPocketId !== ONE_FIFTEEN_POCKET_1) {
+          warningText = "🟡 الكرة 1 تنزل في الميدل الأعلى فقط!";
+        } else if (hitBall.number === 15 && calledPocketId !== ONE_FIFTEEN_POCKET_15) {
+          warningText = "🟤 الكرة 15 تنزل في الميدل الأسفل فقط!";
+        }
       }
     } else if (hitBall && mode === "snooker" && snookerTarget && !isBotAiming) {
       if (snookerTarget.phase === "red" && hitBall.type !== "red") {
@@ -748,6 +875,173 @@ export function renderTableScene({
       ctx.fillStyle = "#0284c7";
       ctx.fillRect(-cueOffset + 4, -3, 2, 6);
     }
+
+    ctx.restore();
+  }
+
+  // 7. Special-Play Slow Motion Visual Effect (Vignette, Target Pocket Beacon & Ball Comet Trail)
+  if (slowMoCam && slowMoIntensity > 0.02) {
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.014);
+    const alpha = Math.min(1, slowMoIntensity);
+
+    // Subtle cinematic vignette focusing on the table action
+    const vig = ctx.createRadialGradient(
+      slowMoCam.pocket.x,
+      slowMoCam.pocket.y,
+      90,
+      TABLE_WIDTH / 2,
+      TABLE_HEIGHT / 2,
+      TABLE_WIDTH * 0.72
+    );
+    vig.addColorStop(0, "rgba(2, 6, 23, 0)");
+    vig.addColorStop(0.55, `rgba(2, 6, 23, ${0.18 * alpha})`);
+    vig.addColorStop(1, `rgba(2, 6, 23, ${0.58 * alpha})`);
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+
+    // Target pocket pulsing beacon
+    ctx.save();
+    const pk = slowMoCam.pocket;
+    const ringR = pk.r + 5 + pulse * 8;
+    ctx.strokeStyle = `rgba(56, 189, 248, ${(0.55 + pulse * 0.35) * alpha})`;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(pk.x, pk.y, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(250, 204, 21, ${0.7 * alpha})`;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(pk.x, pk.y, pk.r + 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Featured ball comet trail & aura (while heading toward pocket or gliding)
+    const featuredBall =
+      slowMoCam.ballId !== undefined
+        ? balls.find((b) => b.id === slowMoCam.ballId)
+        : balls.find((b) => b.number === slowMoCam.ballNum && b.type !== "cue");
+
+    if (featuredBall && !featuredBall.isPotted) {
+      const spd = Math.hypot(featuredBall.vx, featuredBall.vy);
+      const r = featuredBall.radius;
+      ctx.save();
+
+      if (spd > 0.25) {
+        const ux = featuredBall.vx / spd;
+        const uy = featuredBall.vy / spd;
+        const trailLen = Math.min(72, 26 + spd * 4.5);
+        const tailX = featuredBall.x - ux * trailLen;
+        const tailY = featuredBall.y - uy * trailLen;
+
+        const trailGrad = ctx.createLinearGradient(tailX, tailY, featuredBall.x, featuredBall.y);
+        trailGrad.addColorStop(0, "rgba(56, 189, 248, 0)");
+        trailGrad.addColorStop(0.55, `rgba(56, 189, 248, ${0.32 * alpha})`);
+        trailGrad.addColorStop(1, `rgba(250, 204, 21, ${0.65 * alpha})`);
+
+        ctx.strokeStyle = trailGrad;
+        ctx.lineWidth = r * 1.45;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(tailX, tailY);
+        ctx.lineTo(featuredBall.x, featuredBall.y);
+        ctx.stroke();
+
+        // Guiding vector ray toward pocket
+        ctx.strokeStyle = `rgba(250, 204, 21, ${0.42 * alpha})`;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([3, 5]);
+        ctx.beginPath();
+        ctx.moveTo(featuredBall.x, featuredBall.y);
+        ctx.lineTo(pk.x, pk.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Outer energy halo around the ball
+      ctx.strokeStyle = `rgba(250, 204, 21, ${(0.65 + pulse * 0.35) * alpha})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(featuredBall.x, featuredBall.y, r + 4 + pulse * 3, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  // 8. TEMPORARY DEBUG OVERLAY: Red Table Bounds & Pockets Calibration Box
+  {
+    const { jaws: debugJaws, railSpans } = tableCfg.geometry;
+    ctx.save();
+
+    // Inner playable cushion rectangle (walls)
+    ctx.strokeStyle = "#ff1e1e";
+    ctx.lineWidth = 2.2;
+    ctx.strokeRect(
+      walls.left,
+      walls.top,
+      walls.right - walls.left,
+      walls.bottom - walls.top
+    );
+
+    // Straight rail spans highlight
+    ctx.strokeStyle = "rgba(255, 60, 60, 0.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(railSpans.topLeftEndX, walls.top);
+    ctx.lineTo(railSpans.topMidStartX, walls.top);
+    ctx.moveTo(railSpans.topMidEndX, walls.top);
+    ctx.lineTo(railSpans.topRightStartX, walls.top);
+    ctx.moveTo(railSpans.botLeftEndX, walls.bottom);
+    ctx.lineTo(railSpans.botMidStartX, walls.bottom);
+    ctx.moveTo(railSpans.botMidEndX, walls.bottom);
+    ctx.lineTo(railSpans.botRightStartX, walls.bottom);
+    ctx.moveTo(walls.left, railSpans.leftTopEndY);
+    ctx.lineTo(walls.left, railSpans.leftBotStartY);
+    ctx.moveTo(walls.right, railSpans.rightTopEndY);
+    ctx.lineTo(walls.right, railSpans.rightBotStartY);
+    ctx.stroke();
+
+    // Pocket circles & centers
+    for (let pi = 0; pi < pockets.length; pi++) {
+      const p = pockets[pi];
+      ctx.fillStyle = "rgba(255, 30, 30, 0.18)";
+      ctx.strokeStyle = "#ff1e1e";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Center crosshair
+      ctx.beginPath();
+      ctx.moveTo(p.x - 4, p.y);
+      ctx.lineTo(p.x + 4, p.y);
+      ctx.moveTo(p.x, p.y - 4);
+      ctx.lineTo(p.x, p.y + 4);
+      ctx.stroke();
+    }
+
+    // Pocket jaws
+    ctx.fillStyle = "rgba(255, 120, 0, 0.85)";
+    for (let ji = 0; ji < debugJaws.length; ji++) {
+      const jw = debugJaws[ji];
+      ctx.beginPath();
+      ctx.arc(jw.x, jw.y, jw.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Dimension label
+    ctx.fillStyle = "rgba(255, 30, 30, 0.9)";
+    ctx.font = "bold 10px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(
+      `DEBUG L:${walls.left} R:${walls.right} T:${walls.top} B:${walls.bottom}`,
+      walls.left + 8,
+      walls.top + 14
+    );
 
     ctx.restore();
   }

@@ -156,7 +156,11 @@ export function TableEntranceOverlay({
             🔴 LIVE ARENA
           </span>
           <span className="text-xs sm:text-sm font-black text-amber-300">
-            {mode === "snooker" ? "بطولة السنوكر الإنجليزي" : "بطولة بلياردو 8-Ball"}
+            {mode === "snooker"
+              ? "بطولة السنوكر الإنجليزي"
+              : mode === "one-fifteen"
+              ? "بطولة بلياردو (1 و 15)"
+              : "بطولة بلياردو 8-Ball"}
           </span>
         </div>
         <span className="text-[11px] font-bold text-slate-300 bg-black/60 px-2.5 py-1 rounded-full border border-white/15">
