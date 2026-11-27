@@ -30,6 +30,9 @@ export interface ShotOutcomeContext {
   snookerOnColorAfterRed?: boolean;
   humanScore?: number;
   botScore?: number;
+  mustShootForwardFromBaulk?: boolean;
+  oneFifteenUncalledCount?: 0 | 1;
+  onOneFifteenUncalledCountChange?: (next: 0 | 1) => void;
   onSnookerUpdate?: (update: {
     humanScore: number;
     botScore: number;
@@ -66,6 +69,9 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     onTurnChange,
     onBallInHand,
     onMessage,
+    mustShootForwardFromBaulk = false,
+    oneFifteenUncalledCount = 0,
+    onOneFifteenUncalledCountChange,
   } = ctx;
 
   if (mode === "8-ball" || mode === "one-fifteen") {
@@ -140,6 +146,15 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     } else if (!firstHit) {
       foulOccurred = true;
       foulReason = "الكرة البيضاء لم تلمس أي كرة";
+    } else if (
+      isOneFifteen &&
+      mustShootForwardFromBaulk &&
+      baulkLineMaxX !== undefined &&
+      firstHit.x < baulkLineMaxX &&
+      (balls[0]?.railBounces || 0) === 0
+    ) {
+      foulOccurred = true;
+      foulReason = "ممنوع ضرب كرة خلف خط البداية مباشرة (العب للأمام)";
     } else if (shooterGroup === "unassigned" && firstHit.number === 8) {
       foulOccurred = true;
       foulReason = "لا يجوز لمس الكرة 8 أولاً";
@@ -169,6 +184,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     if (foulOccurred) {
       if (soundEnabled) playFoulBuzzer();
       if (isOneFifteen) {
+        onOneFifteenUncalledCountChange?.(0);
         for (const entry of pottedList) {
           if (entry.ball.number !== 8) respotBall(entry.ball, balls, tableGeom);
         }
@@ -203,7 +219,57 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       return;
     }
 
-    // 3. Open Pockets / Called Pocket & Special 1 & 15 Pocket Checks
+    // 3. 1 & 15 Uncalled Safety Rule (2-shot visit when pocket is NOT called on non-break shot)
+    if (isOneFifteen && !wasBreakShot && targetPocketForThisShot === null) {
+      if (pottedList.length > 0) {
+        for (const entry of pottedList) {
+          if (entry.ball.number !== 8) respotBall(entry.ball, balls, tableGeom);
+        }
+        onOneFifteenUncalledCountChange?.(0);
+        if (!isPractice) {
+          const nextT = activeShooter === "human" ? "bot" : "human";
+          onTurnChange(nextT);
+          onMessage(
+            nextT === "human"
+              ? "🎯 الخصم أسقط كرة بدون تحديد جيب! عادت لنقطة المثلث وانتقل المضرب لك."
+              : "🎯 نزلت كرة بدون تحديد جيب! عادت لنقطة المثلث وانتقل المضرب للخصم."
+          );
+        } else {
+          onMessage("🎯 نزلت كرة بدون تحديد جيب! عادت لنقطة المثلث.");
+        }
+        return;
+      }
+
+      if (oneFifteenUncalledCount === 0) {
+        onOneFifteenUncalledCountChange?.(1);
+        onMessage(
+          activeShooter === "human"
+            ? "🟡 الضربة الأولى (بدون تحديد جيب): لك ضربة ثانية — حدد جيب أو العب بحرية!"
+            : "🤖 الخصم لعب ضربة أمان أولى وله ضربة ثانية..."
+        );
+        return;
+      }
+
+      onOneFifteenUncalledCountChange?.(0);
+      if (!isPractice) {
+        const nextT = activeShooter === "human" ? "bot" : "human";
+        onTurnChange(nextT);
+        onMessage(
+          nextT === "human"
+            ? "انتهت ضربتا الخصم — دورك الآن!"
+            : "انتهت الضربتان بدون تحديد جيب — دور الخصم."
+        );
+      } else {
+        onMessage("انتهت الضربتان — يمكنك التصويب من جديد.");
+      }
+      return;
+    }
+
+    if (isOneFifteen) {
+      onOneFifteenUncalledCountChange?.(0);
+    }
+
+    // 4. Open Pockets / Called Pocket & Special 1 & 15 Pocket Checks
     let updatedHumanGroup = humanGroup;
     let updatedBotGroup = botGroup;
 

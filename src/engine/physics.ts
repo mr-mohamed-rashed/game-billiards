@@ -832,7 +832,7 @@ function isSegmentClear(
 
 export interface BotShotPlan {
   angle: number;
-  pocketId: number;
+  pocketId: number | null;
   speed: number;
 }
 
@@ -843,16 +843,19 @@ export function computeBotShot(
   mode: GameMode,
   geom: TableGeometry = DEFAULT_TABLE_GEOMETRY,
   snookerTarget?: SnookerTargetInfo,
-  botAimError: number = 0.048
+  botAimError: number = 0.048,
+  mustShootForwardFromBaulk: boolean = false
 ): BotShotPlan | null {
   const cueBall = balls[0];
   if (!cueBall || cueBall.isPotted) return null;
   const ballRadius = cueBall.radius || getModeBallRadius(mode);
   const bounds = getPlayBounds(geom, ballRadius);
   const { pockets } = geom;
+  const breakLineX = getBreakLineX(mode, geom);
 
   const candidateBalls = balls.filter((b) => {
     if (b.isPotted || b.type === "cue") return false;
+    if (mustShootForwardFromBaulk && b.x < breakLineX) return false;
     const isPool = mode === "8-ball" || mode === "one-fifteen";
     if (isPool && botGroup !== "unassigned") {
       const botType = botGroup === "solids" ? "solid" : "stripe";
@@ -868,7 +871,15 @@ export function computeBotShot(
     return true;
   });
 
-  const targets = candidateBalls.length > 0 ? candidateBalls : balls.filter((b) => !b.isPotted && b.type !== "cue");
+  const fallbackPool = balls.filter(
+    (b) => !b.isPotted && b.type !== "cue" && (!mustShootForwardFromBaulk || b.x >= breakLineX)
+  );
+  const targets =
+    candidateBalls.length > 0
+      ? candidateBalls
+      : fallbackPool.length > 0
+      ? fallbackPool
+      : balls.filter((b) => !b.isPotted && b.type !== "cue");
   if (targets.length === 0) return null;
 
   let bestScore = -Infinity;
@@ -904,6 +915,7 @@ export function computeBotShot(
 
       const uCGx = toGx / distCG;
       const uCGy = toGy / distCG;
+      if (mustShootForwardFromBaulk && uCGx <= 0.05) continue;
       const cutDot = uCGx * uBPx + uCGy * uBPy;
       if (cutDot <= 0.18) continue; // Impossible >80 deg cut
 
@@ -930,27 +942,21 @@ export function computeBotShot(
     }
   }
 
-  // Fallback if all pockets are cut-blocked: hit the closest legal ball cleanly
+  // Fallback if all pockets are cut-blocked: hit the closest legal ball cleanly (or play forward safety)
   if (!bestPlan) {
     const closest = targets.reduce((prev, curr) => {
       const d1 = Math.hypot(prev.x - cueBall.x, prev.y - cueBall.y);
       const d2 = Math.hypot(curr.x - cueBall.x, curr.y - cueBall.y);
       return d1 < d2 ? prev : curr;
     });
-    const bestPocket =
-      mode === "one-fifteen" && closest.number === 1
-        ? pockets[ONE_FIFTEEN_POCKET_1]
-        : mode === "one-fifteen" && closest.number === 15
-        ? pockets[ONE_FIFTEEN_POCKET_15]
-        : pockets.reduce((prev, curr) => {
-            const d1 = Math.hypot(prev.x - closest.x, prev.y - closest.y);
-            const d2 = Math.hypot(curr.x - closest.x, curr.y - closest.y);
-            return d1 < d2 ? prev : curr;
-          });
+    const fallbackAngle =
+      mustShootForwardFromBaulk && closest.x <= cueBall.x
+        ? 0
+        : Math.atan2(closest.y - cueBall.y, closest.x - cueBall.x);
     return {
-      angle: Math.atan2(closest.y - cueBall.y, closest.x - cueBall.x),
-      pocketId: bestPocket.id,
-      speed: 22,
+      angle: fallbackAngle,
+      pocketId: mode === "one-fifteen" ? null : pockets[0].id,
+      speed: 20,
     };
   }
 

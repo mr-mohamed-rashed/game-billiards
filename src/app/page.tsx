@@ -118,6 +118,7 @@ function CueMasterApp() {
   } | null>(null);
 
   const [calledPocketId, setCalledPocketId] = useState<number | null>(null);
+  const [oneFifteenUncalledCount, setOneFifteenUncalledCount] = useState<0 | 1>(0);
   const [isBallInHand, setIsBallInHand] = useState(false);
   const [isBreakShot, setIsBreakShot] = useState(true);
   const [humanScore, setHumanScore] = useState(0);
@@ -174,6 +175,8 @@ function CueMasterApp() {
   const isShootingRef = useRef(false);
   const botAimVisibleRef = useRef(false);
   const isBallInHandRef = useRef(false);
+  const mustShootForwardFromBaulkRef = useRef(false);
+  const oneFifteenUncalledCountRef = useRef<0 | 1>(0);
   const isBreakShotRef = useRef(true);
   const wasBreakShotRef = useRef(false);
   const ballInHandHoverPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -348,28 +351,35 @@ function CueMasterApp() {
 
     if (!isPracticeRef.current) {
       const nextTurn = turnRef.current === "human" ? "bot" : "human";
+      oneFifteenUncalledCountRef.current = 0;
+      setOneFifteenUncalledCount(0);
       if (nextTurn === "human") {
         ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom, baulkMaxX);
         isBallInHandRef.current = true;
+        mustShootForwardFromBaulkRef.current = modeRef.current === "one-fifteen";
         setIsBallInHand(true);
         turnRef.current = "human";
         setTurn("human");
         setTurnMessage(
           baulkMaxX !== undefined
-            ? "⏱️ انتهى وقت الخصم! ضع الكرة البيضاء خلف الخط 🧤"
-            : "⏱️ انتهى وقت الخصم! الفاول لصالحك، اسحب الكرة البيضاء 🧤"
+            ? "⏱️ انتهى وقت الخصم! ضع الكرة البيضاء خلف الخط والعب للأمام"
+            : "⏱️ انتهى وقت الخصم! الفاول لصالحك، اسحب الكرة البيضاء في أي مكان!"
         );
       } else {
         placeCueBallSafely(ballsRef.current, activeGeom, baulkMaxX);
         isBallInHandRef.current = false;
+        mustShootForwardFromBaulkRef.current = modeRef.current === "one-fifteen";
         setIsBallInHand(false);
         turnRef.current = "bot";
         setTurn("bot");
         setTurnMessage("⚠️ انتهى وقتك! الكرة في يد الخصم.");
       }
     } else {
+      oneFifteenUncalledCountRef.current = 0;
+      setOneFifteenUncalledCount(0);
       ballInHandHoverPosRef.current = findFreeCueBallPos(ballsRef.current, activeGeom, baulkMaxX);
       isBallInHandRef.current = true;
+      mustShootForwardFromBaulkRef.current = modeRef.current === "one-fifteen";
       setIsBallInHand(true);
       setTurnMessage("⏱️ انتهى وقت التصويب في التدريب!");
     }
@@ -402,6 +412,9 @@ function CueMasterApp() {
     snookerOnColorAfterRedRef.current = false;
     turnRef.current = "human";
     isBallInHandRef.current = false;
+    mustShootForwardFromBaulkRef.current = false;
+    oneFifteenUncalledCountRef.current = 0;
+    setOneFifteenUncalledCount(0);
     isBreakShotRef.current = true;
     isDraggingBreakCueRef.current = false;
     isShootingRef.current = false;
@@ -568,6 +581,7 @@ function CueMasterApp() {
         isBreakShot: isBreakShotRef.current,
         isBotAiming: botAimVisibleRef.current,
         isBallInHand: isBallInHandRef.current,
+        mustShootForwardFromBaulk: mustShootForwardFromBaulkRef.current,
         ballInHandHoverPos: ballInHandHoverPosRef.current,
         isDraggingBall: isDraggingBallInHandRef.current || isDraggingBreakCueRef.current,
         isHoveringBreakCue: isHoveringBreakCueRef.current,
@@ -708,6 +722,9 @@ function CueMasterApp() {
         calledPocketIdRef.current = null;
         setCalledPocketId(null);
 
+        const shotMustShootForward = mustShootForwardFromBaulkRef.current;
+        mustShootForwardFromBaulkRef.current = false;
+
         resolveShotOutcome({
           mode: modeRef.current,
           isPractice: isPracticeRef.current,
@@ -725,6 +742,12 @@ function CueMasterApp() {
           snookerOnColorAfterRed: snookerOnColorAfterRedRef.current,
           humanScore: humanScoreRef.current,
           botScore: botScoreRef.current,
+          mustShootForwardFromBaulk: shotMustShootForward,
+          oneFifteenUncalledCount: oneFifteenUncalledCountRef.current,
+          onOneFifteenUncalledCountChange: (nextCount) => {
+            oneFifteenUncalledCountRef.current = nextCount;
+            setOneFifteenUncalledCount(nextCount);
+          },
           onSnookerUpdate: ({ humanScore: hs, botScore: bs, onColorAfterRed }) => {
             humanScoreRef.current = hs;
             botScoreRef.current = bs;
@@ -750,6 +773,9 @@ function CueMasterApp() {
             ballInHandHoverPosRef.current = hoverPos;
             const enabled = hoverPos !== null;
             isBallInHandRef.current = enabled;
+            if (enabled && modeRef.current === "one-fifteen") {
+              mustShootForwardFromBaulkRef.current = true;
+            }
             setIsBallInHand(enabled);
           },
           onMessage: setTurnMessage,
@@ -807,7 +833,11 @@ function CueMasterApp() {
         isBallInHandRef.current = false;
         ballInHandHoverPosRef.current = null;
         setIsBallInHand(false);
-        setTurnMessage("✅ تم وضع الكرة! وجّه واسحب شريط القوة على اليسار للضرب.");
+        setTurnMessage(
+          modeRef.current === "one-fifteen" && mustShootForwardFromBaulkRef.current
+            ? "✅ تم وضع الكرة خلف الخط! صوّب للأمام (وحدد جيب أو العب بدون تحديد)."
+            : "✅ تم وضع الكرة! وجّه واسحب شريط القوة على اليسار للضرب."
+        );
         if (soundEnabledRef.current) playBallClack(4);
       }
       return true;
@@ -909,8 +939,9 @@ function CueMasterApp() {
         (p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 38
       );
       if (clickedPocket && !isBallInHandRef.current) {
-        calledPocketIdRef.current = clickedPocket.id;
-        setCalledPocketId(clickedPocket.id);
+        const nextPocket = calledPocketIdRef.current === clickedPocket.id ? null : clickedPocket.id;
+        calledPocketIdRef.current = nextPocket;
+        setCalledPocketId(nextPocket);
         if (soundEnabledRef.current) playBallClack(3);
         return;
       }
@@ -1094,6 +1125,17 @@ function CueMasterApp() {
       return;
     }
 
+    if (
+      modeRef.current === "one-fifteen" &&
+      mustShootForwardFromBaulkRef.current &&
+      Math.cos(aimAngleRef.current) <= 0.02
+    ) {
+      setTurnMessage("⚠️ في لعبة 1 و 15: الكرة خلف الخط — يجب التصويب للأمام!");
+      applyPowerVisual(0);
+      setPower(0);
+      return;
+    }
+
     const cueBall = ballsRef.current[0];
     if (!cueBall || cueBall.isPotted) return;
 
@@ -1142,7 +1184,12 @@ function CueMasterApp() {
           modeRef.current === "snooker" || modeRef.current === "one-fifteen"
             ? getBreakLineX(modeRef.current, activeGeom)
             : undefined;
-        if (cueBall.isPotted) placeCueBallSafely(ballsRef.current, activeGeom, baulkMaxX);
+        if (cueBall.isPotted) {
+          placeCueBallSafely(ballsRef.current, activeGeom, baulkMaxX);
+          if (modeRef.current === "one-fifteen") {
+            mustShootForwardFromBaulkRef.current = true;
+          }
+        }
 
         const snookerTarget = getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current);
         const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current, modeRef.current);
@@ -1152,14 +1199,19 @@ function CueMasterApp() {
           modeRef.current,
           activeGeom,
           snookerTarget,
-          matchDiff.botAimError
+          matchDiff.botAimError,
+          modeRef.current === "one-fifteen" && mustShootForwardFromBaulkRef.current
         );
         if (!plan) return;
 
         calledPocketIdRef.current = plan.pocketId;
         setCalledPocketId(plan.pocketId);
         activeShotCalledPocketRef.current = plan.pocketId;
-        setTurnMessage("🤖 الخصم يوجّه العصا نحو الهدف...");
+        setTurnMessage(
+          plan.pocketId === null && modeRef.current === "one-fifteen"
+            ? "🤖 الخصم يلعب ضربة أمان بدون تحديد جيب..."
+            : "🤖 الخصم يوجّه العصا نحو الهدف..."
+        );
 
         const startAngle = aimAngleRef.current;
         // Shortest wrapped delta angle
@@ -1406,6 +1458,7 @@ function CueMasterApp() {
             showPocketPopover={showPocketPopover}
             setShowPocketPopover={setShowPocketPopover}
             calledPocketId={calledPocketId}
+            oneFifteenUncalledCount={oneFifteenUncalledCount}
             isPortrait={isPortrait}
             isVirtualLandscape={isVirtualLandscape}
             slowMoEnabled={slowMoEnabled}
@@ -1498,9 +1551,11 @@ function CueMasterApp() {
                   dir="rtl"
                   className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-blue-950/95 border border-blue-400 text-blue-100 px-3 py-1 rounded-full text-[10px] font-black shadow-lg pointer-events-none whitespace-nowrap"
                 >
-                  {mode === "snooker" || mode === "one-fifteen"
-                    ? "🧤 الكرة في يدك: ضعها في أي مكان خلف الخط ثم ارفع إصبعك"
-                    : "🧤 الكرة في يدك: اسحبها على الطاولة ثم ارفع إصبعك"}
+                  {mode === "snooker"
+                    ? "✋ الكرة في يدك: ضعها في أي مكان خلف الخط ثم ارفع إصبعك"
+                    : mode === "one-fifteen"
+                    ? "✋ الكرة في يدك: ضعها خلف خط البداية والعب للأمام فقط"
+                    : "✋ الكرة في يدك: حرّكها بحرية في أي مكان داخل الطاولة"}
                 </div>
               )}
 
@@ -1509,7 +1564,7 @@ function CueMasterApp() {
                   dir="rtl"
                   className="absolute top-1.5 left-1/2 -translate-x-1/2 z-20 bg-cyan-950/90 border border-cyan-400/70 text-cyan-100 px-3 py-0.5 rounded-full text-[10px] font-black shadow-lg pointer-events-none whitespace-nowrap"
                 >
-                  🧤 ضربة البداية: حرّك الكرة البيضاء باليد خلف الخط وصوّب على المثلث
+                  ✋ ضربة البداية: حرّك الكرة البيضاء باليد خلف الخط وصوّب على المثلث
                 </div>
               )}
 

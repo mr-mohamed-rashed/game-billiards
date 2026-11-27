@@ -218,56 +218,56 @@ export function getMatchDifficulty(
   isPractice: boolean,
   mode: GameMode = "8-ball"
 ): MatchDifficulty {
-  const forceCall = mode === "one-fifteen";
+  const isOneFifteen = mode === "one-fifteen";
   if (isPractice || stake <= 100) {
     return {
       id: "rookie",
       labelAr: isPractice ? "تدريب حر" : "مبتدئ",
-      aimLabelAr: forceCall ? "سهم كامل + تحديد كل جيب" : "سهم كامل (100%)",
+      aimLabelAr: isOneFifteen ? "سهم كامل • اختياري تحديد جيب (ضربتين أمان)" : "سهم كامل (100%)",
       badgeColor: "#22c55e",
       aimScale: 1.0,
       maxAimDistCap: 800,
       targetLineScale: 1.0,
       botAimError: 0.055,
-      requireCalledPocket: forceCall,
+      requireCalledPocket: false,
     };
   }
   if (stake <= 500) {
     return {
       id: "pro",
       labelAr: "محترفين",
-      aimLabelAr: forceCall ? "سهم متوسط + تحديد كل جيب" : "سهم متوسط (62%)",
+      aimLabelAr: isOneFifteen ? "سهم متوسط • اختياري تحديد جيب (ضربتين أمان)" : "سهم متوسط (62%)",
       badgeColor: "#38bdf8",
       aimScale: 0.62,
       maxAimDistCap: 380,
       targetLineScale: 0.65,
       botAimError: 0.032,
-      requireCalledPocket: forceCall,
+      requireCalledPocket: false,
     };
   }
   if (stake <= 2500) {
     return {
       id: "masters",
       labelAr: "أساتذة",
-      aimLabelAr: "سهم قصير (38%) + تحديد جيب",
+      aimLabelAr: isOneFifteen ? "سهم قصير • اختياري تحديد جيب" : "سهم قصير (38%) + تحديد جيب",
       badgeColor: "#f59e0b",
       aimScale: 0.38,
       maxAimDistCap: 230,
       targetLineScale: 0.38,
       botAimError: 0.018,
-      requireCalledPocket: true,
+      requireCalledPocket: !isOneFifteen,
     };
   }
   return {
     id: "legend",
     labelAr: "أساطير 🔥",
-    aimLabelAr: "سهم قصير جداً (22%) + تحديد جيب",
+    aimLabelAr: isOneFifteen ? "سهم قصير جداً • اختياري تحديد جيب" : "سهم قصير جداً (22%) + تحديد جيب",
     badgeColor: "#f43f5e",
     aimScale: 0.22,
     maxAimDistCap: 135,
     targetLineScale: 0.22,
     botAimError: 0.008,
-    requireCalledPocket: true,
+    requireCalledPocket: !isOneFifteen,
   };
 }
 

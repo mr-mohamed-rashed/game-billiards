@@ -77,6 +77,7 @@ interface TableHUDProps {
   showPocketPopover: boolean;
   setShowPocketPopover: React.Dispatch<React.SetStateAction<boolean>>;
   calledPocketId: number | null;
+  oneFifteenUncalledCount?: 0 | 1;
   isPortrait: boolean;
   isVirtualLandscape: boolean;
   slowMoEnabled: boolean;
@@ -86,7 +87,7 @@ interface TableHUDProps {
   onSpinPointerCancel: () => void;
   onResetSpin: () => void;
   onFineAim: (delta: number) => void;
-  onSelectPocket: (pocketId: number) => void;
+  onSelectPocket: (pocketId: number | null) => void;
   onToggleSlowMo: () => void;
   onOpenShop: () => void;
   onToggleVirtualLandscape: () => void;
@@ -121,6 +122,7 @@ export function TableHUD({
   showPocketPopover,
   setShowPocketPopover,
   calledPocketId,
+  oneFifteenUncalledCount = 0,
   isPortrait,
   isVirtualLandscape,
   slowMoEnabled,
@@ -331,19 +333,38 @@ export function TableHUD({
               title="تحديد الجيب (مطلوب للكرة 8)"
             >
               <span>🎯</span>
-              <span className="hidden md:inline">{activePocketObj ? activePocketObj.name : "مفتوح"}</span>
+              <span className="hidden md:inline">
+                {activePocketObj
+                  ? activePocketObj.name
+                  : mode === "one-fifteen" && oneFifteenUncalledCount === 1
+                  ? "ضربة 2/2"
+                  : "بدون تحديد"}
+              </span>
             </button>
 
             {showPocketPopover && (
               <div
                 dir="rtl"
-                className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border-2 border-amber-400/70 rounded-xl p-2 shadow-2xl grid grid-cols-3 gap-1 w-52"
+                className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border-2 border-amber-400/70 rounded-xl p-2 shadow-2xl grid grid-cols-3 gap-1 w-56"
               >
+                <button
+                  type="button"
+                  onClick={() => onSelectPocket(null)}
+                  className={`col-span-3 px-2 py-1 rounded text-[9px] font-black cursor-pointer mb-0.5 ${
+                    calledPocketId === null
+                      ? "bg-emerald-500 text-slate-950"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {mode === "one-fifteen"
+                    ? "🔓 بدون تحديد جيب (ضربتين أمان بدون تنزيل)"
+                    : "🔓 مفتوح (إلغاء تحديد الجيب)"}
+                </button>
                 {POCKETS.map((p) => (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => onSelectPocket(p.id)}
+                    onClick={() => onSelectPocket(calledPocketId === p.id ? null : p.id)}
                     className={`px-1.5 py-1 rounded text-[9px] font-black cursor-pointer ${
                       calledPocketId === p.id ? "bg-amber-400 text-slate-950" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                     }`}

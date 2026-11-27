@@ -98,6 +98,7 @@ export interface RenderSceneParams {
   isBreakShot?: boolean;
   isBotAiming?: boolean;
   isBallInHand: boolean;
+  mustShootForwardFromBaulk?: boolean;
   ballInHandHoverPos: { x: number; y: number } | null;
   isDraggingBall?: boolean;
   isHoveringBreakCue?: boolean;
@@ -132,6 +133,7 @@ export function renderTableScene({
   isBreakShot = false,
   isBotAiming = false,
   isBallInHand,
+  mustShootForwardFromBaulk = false,
   ballInHandHoverPos,
   isDraggingBall = false,
   isHoveringBreakCue = false,
@@ -222,9 +224,11 @@ export function renderTableScene({
     }
   }
 
-  // Highlight legal behind-the-line zone on Break Shot (or Snooker / 1&15 Ball-in-Hand)
+  // Highlight legal behind-the-line zone on Break Shot (or Snooker / 1&15 Ball-in-Hand / Forward-from-baulk)
   if (
-    ((isBreakShot && !isShooting) || (isBallInHand && (mode === "snooker" || mode === "one-fifteen"))) &&
+    ((isBreakShot && !isShooting) ||
+      (isBallInHand && (mode === "snooker" || mode === "one-fifteen")) ||
+      (mustShootForwardFromBaulk && mode === "one-fifteen" && !isShooting)) &&
     (turn === "human" || isPractice)
   ) {
     ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
@@ -577,7 +581,17 @@ export function renderTableScene({
     let isAimedTargetLegal = true;
     let warningText = "";
 
-    if (hitBall && (mode === "8-ball" || mode === "one-fifteen") && !isBotAiming) {
+    if (mode === "one-fifteen" && mustShootForwardFromBaulk && !isBotAiming) {
+      if (cosA <= 0.02) {
+        isAimedTargetLegal = false;
+        warningText = "⚠️ العب للأمام من خلف خط البداية!";
+      } else if (hitBall && hitBall.x < breakLineX) {
+        isAimedTargetLegal = false;
+        warningText = "⚠️ ممنوع ضرب كرة خلف خط البداية!";
+      }
+    }
+
+    if (hitBall && (mode === "8-ball" || mode === "one-fifteen") && !isBotAiming && isAimedTargetLegal) {
       if (humanGroup === "unassigned") {
         if (hitBall.number === 8) {
           isAimedTargetLegal = false;
@@ -648,11 +662,17 @@ export function renderTableScene({
 
     // Ghost ball preview right where cue ball edge kisses the cushion
     if (!hitBall && cushionHit) {
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+      ctx.strokeStyle = isAimedTargetLegal ? "rgba(255, 255, 255, 0.55)" : "rgba(239, 68, 68, 0.85)";
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.arc(endAimX, endAimY, ballRadius, 0, Math.PI * 2);
       ctx.stroke();
+    }
+    if (!hitBall && !isAimedTargetLegal && warningText) {
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(warningText, cueBall.x, Math.max(walls.top + 18, cueBall.y - 22));
     }
 
     // Bank-shot cushion reflection preview (includes Left/Right English deflection)
