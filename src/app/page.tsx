@@ -122,7 +122,7 @@ function CueMasterApp() {
   const [oneFifteenUncalledCount, setOneFifteenUncalledCount] = useState<0 | 1>(0);
   const [oneFifteenHumanEightPocket, setOneFifteenHumanEightPocket] = useState<number | null>(null);
   const [oneFifteenBotEightPocket, setOneFifteenBotEightPocket] = useState<number | null>(null);
-  const [oneFifteenChoiceModal, setOneFifteenChoiceModal] = useState<{ forbiddenPocket: number | null } | null>(null);
+  const [awaitingOneFifteenPocketPick, setAwaitingOneFifteenPocketPick] = useState(false);
   const [isBallInHand, setIsBallInHand] = useState(false);
   const [isBreakShot, setIsBreakShot] = useState(true);
   const [humanScore, setHumanScore] = useState(0);
@@ -183,6 +183,8 @@ function CueMasterApp() {
   const oneFifteenUncalledCountRef = useRef<0 | 1>(0);
   const oneFifteenHumanEightPocketRef = useRef<number | null>(null);
   const oneFifteenBotEightPocketRef = useRef<number | null>(null);
+  const awaitingOneFifteenPocketPickRef = useRef(false);
+  const isHoveringBallInHandRef = useRef(false);
   const aimAngleHistoryRef = useRef<{ angle: number; time: number }[]>([]);
   const isBreakShotRef = useRef(true);
   const wasBreakShotRef = useRef(false);
@@ -235,6 +237,7 @@ function CueMasterApp() {
   useEffect(() => { isBallInHandRef.current = isBallInHand; }, [isBallInHand]);
   useEffect(() => { oneFifteenHumanEightPocketRef.current = oneFifteenHumanEightPocket; }, [oneFifteenHumanEightPocket]);
   useEffect(() => { oneFifteenBotEightPocketRef.current = oneFifteenBotEightPocket; }, [oneFifteenBotEightPocket]);
+  useEffect(() => { awaitingOneFifteenPocketPickRef.current = awaitingOneFifteenPocketPick; }, [awaitingOneFifteenPocketPick]);
 
   const activeCue = ALL_CUES.find((c) => c.id === selectedCue) || ALL_CUES[0];
   const currentTable = ALL_TABLES.find((t) => t.id === selectedTable) || ALL_TABLES[0];
@@ -428,7 +431,8 @@ function CueMasterApp() {
     oneFifteenBotEightPocketRef.current = null;
     setOneFifteenHumanEightPocket(null);
     setOneFifteenBotEightPocket(null);
-    setOneFifteenChoiceModal(null);
+    awaitingOneFifteenPocketPickRef.current = false;
+    setAwaitingOneFifteenPocketPick(false);
     aimAngleHistoryRef.current = [];
     isBreakShotRef.current = true;
     isDraggingBreakCueRef.current = false;
@@ -605,6 +609,7 @@ function CueMasterApp() {
         calledPocketId: calledPocketIdRef.current,
         oneFifteenHumanEightPocket: oneFifteenHumanEightPocketRef.current,
         oneFifteenBotEightPocket: oneFifteenBotEightPocketRef.current,
+        awaitingOneFifteenPocketPick: awaitingOneFifteenPocketPickRef.current,
         humanGroup: humanGroupRef.current,
         snookerTarget: getSnookerTargetInfo(ballsRef.current, snookerOnColorAfterRedRef.current),
         aimAngle: aimAngleRef.current,
@@ -774,9 +779,10 @@ function CueMasterApp() {
               setOneFifteenBotEightPocket(pId);
             }
           },
-          onRequestOneFifteenPocketChoice: (shooter, forbiddenPocket) => {
-            if (shooter === "human") {
-              setOneFifteenChoiceModal({ forbiddenPocket });
+          onPromptOneFifteenTablePocketPick: (target) => {
+            if (target === "human") {
+              awaitingOneFifteenPocketPickRef.current = true;
+              setAwaitingOneFifteenPocketPick(true);
             }
           },
           onOneFifteenUncalledCountChange: (nextCount) => {
@@ -905,9 +911,11 @@ function CueMasterApp() {
     setOneFifteenHumanEightPocket(pocketId);
     calledPocketIdRef.current = pocketId;
     setCalledPocketId(pocketId);
-    setOneFifteenChoiceModal(null);
+    awaitingOneFifteenPocketPickRef.current = false;
+    setAwaitingOneFifteenPocketPick(false);
     const pName = getActiveGeom().pockets[pocketId]?.name || `جيب ${pocketId}`;
-    setTurnMessage(`🎯 تم تحديد جيب الكرة 8 المخصص لك: (${pName})!`);
+    const specialNum = humanGroupRef.current === "solids" ? 1 : 15;
+    setTurnMessage(`🎯 تم تحديد (${pName}) للكرة 8! صوّب الآن على الكرة (${specialNum}) في الميدل.`);
     if (soundEnabledRef.current) playBallClack(3);
   };
 
@@ -919,7 +927,7 @@ function CueMasterApp() {
       return;
     }
     const canInteract = (turnRef.current === "human" || isPracticeRef.current) && !isShootingRef.current;
-    if (canInteract && (isBallInHandRef.current || isHoveringBreakCueRef.current)) {
+    if (canInteract && (isHoveringBallInHandRef.current || isHoveringBreakCueRef.current)) {
       canvas.style.cursor = CURSOR_HAND_OPEN;
       return;
     }
@@ -962,20 +970,18 @@ function CueMasterApp() {
       return;
     }
 
-    if (isBallInHandRef.current) {
-      if (isDraggingBallInHandRef.current || e.pointerType === "mouse") {
-        const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
-        const clamped = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
-        ballInHandHoverPosRef.current = clamped;
-        const isOverlapping = ballsRef.current
-          .slice(1)
-          .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < ballRadius * 2.2);
-        const cueBall = ballsRef.current[0];
-        if (!isOverlapping && cueBall) {
-          cueBall.x = clamped.x;
-          cueBall.y = clamped.y;
-          cueBall.isPotted = false;
-        }
+    if (isDraggingBallInHandRef.current) {
+      const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
+      const clamped = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
+      ballInHandHoverPosRef.current = clamped;
+      const isOverlapping = ballsRef.current
+        .slice(1)
+        .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < ballRadius * 2.2);
+      const cueBall = ballsRef.current[0];
+      if (!isOverlapping && cueBall) {
+        cueBall.x = clamped.x;
+        cueBall.y = clamped.y;
+        cueBall.isPotted = false;
       }
       syncCanvasCursor();
       return;
@@ -983,6 +989,7 @@ function CueMasterApp() {
 
     if ((turnRef.current !== "human" && !isPracticeRef.current) || isShootingRef.current) {
       isHoveringBreakCueRef.current = false;
+      isHoveringBallInHandRef.current = false;
       syncCanvasCursor();
       return;
     }
@@ -993,6 +1000,13 @@ function CueMasterApp() {
         Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= Math.max(32, cueBall.radius * 3.4);
     } else {
       isHoveringBreakCueRef.current = false;
+    }
+
+    if (isBallInHandRef.current && cueBall && !cueBall.isPotted) {
+      isHoveringBallInHandRef.current =
+        Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= Math.max(40, cueBall.radius * 3.8);
+    } else {
+      isHoveringBallInHandRef.current = false;
     }
     syncCanvasCursor();
 
@@ -1029,6 +1043,21 @@ function CueMasterApp() {
     const coords = getCanvasCoords(e.clientX, e.clientY);
     if (!coords) return;
 
+    // 1. Awaiting 1 & 15 table pocket pick: player clicks directly on table pocket!
+    if (awaitingOneFifteenPocketPickRef.current) {
+      const clickedPocket = getActiveGeom().pockets.find(
+        (p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 45
+      );
+      if (clickedPocket) {
+        if (oneFifteenBotEightPocketRef.current === clickedPocket.id) {
+          setTurnMessage("⚠️ هذا الجيب محجوز للخصم! اختر جيباً آخر للكرة 8.");
+          return;
+        }
+        handleChooseOneFifteenEightPocket(clickedPocket.id);
+        return;
+      }
+    }
+
     if (modeRef.current === "8-ball" || modeRef.current === "one-fifteen") {
       const clickedPocket = getActiveGeom().pockets.find(
         (p) => Math.hypot(p.x - coords.x, p.y - coords.y) < 38
@@ -1043,28 +1072,40 @@ function CueMasterApp() {
     }
 
     if (isBallInHandRef.current) {
-      isDraggingBallInHandRef.current = true;
-      const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
-      const clamped = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
-      ballInHandHoverPosRef.current = clamped;
-      const isOverlapping = ballsRef.current
-        .slice(1)
-        .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < ballRadius * 2.2);
       const cueBall = ballsRef.current[0];
-      if (!isOverlapping && cueBall) {
-        cueBall.x = clamped.x;
-        cueBall.y = clamped.y;
-        cueBall.isPotted = false;
+      const distToCue = cueBall && !cueBall.isPotted
+        ? Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y)
+        : 0;
+      const isDirectTouchOnCue =
+        !cueBall ||
+        cueBall.isPotted ||
+        distToCue <= Math.max(40, (cueBall?.radius ?? 10) * 3.8);
+
+      if (isDirectTouchOnCue) {
+        isDraggingBallInHandRef.current = true;
+        const ballRadius = ballsRef.current[0]?.radius ?? getModeBallRadius(modeRef.current);
+        const clamped = clampBallInHandPos(coords.x, coords.y, getActiveGeom(), getBallInHandMaxX(), ballRadius);
+        ballInHandHoverPosRef.current = clamped;
+        const isOverlapping = ballsRef.current
+          .slice(1)
+          .some((b) => !b.isPotted && Math.hypot(b.x - clamped.x, b.y - clamped.y) < ballRadius * 2.2);
+        if (!isOverlapping && cueBall) {
+          cueBall.x = clamped.x;
+          cueBall.y = clamped.y;
+          cueBall.isPotted = false;
+        }
+        syncCanvasCursor();
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+        return;
       }
-      syncCanvasCursor();
-      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-      return;
+      // If user tapped outside the cue ball, allow aiming! Fall through to aiming below.
     }
 
     if ((turnRef.current === "human" || isPracticeRef.current) && !isShootingRef.current) {
       const cueBall = ballsRef.current[0];
       if (
         isBreakShotRef.current &&
+        !isBallInHandRef.current &&
         cueBall &&
         !cueBall.isPotted &&
         Math.hypot(coords.x - cueBall.x, coords.y - cueBall.y) <= Math.max(32, cueBall.radius * 3.4)
@@ -1238,7 +1279,10 @@ function CueMasterApp() {
 
   const handleShoot = (explicitPower?: number) => {
     unlockAudio();
-    if (isShootingRef.current || isBallInHandRef.current) return;
+    if (isShootingRef.current) return;
+    if (isBallInHandRef.current) {
+      confirmBallInHand();
+    }
     if (turnRef.current !== "human" && !isPracticeRef.current) return;
 
     const matchDiff = getMatchDifficulty(stakeRef.current, isPracticeRef.current, modeRef.current);
@@ -1680,18 +1724,24 @@ function CueMasterApp() {
               ref={tableStageRef}
               className="relative flex-1 min-w-0 min-h-0 flex items-center justify-center p-1 overflow-hidden"
             >
-              {isBallInHand && (
+              {awaitingOneFifteenPocketPick && (
+                <div
+                  dir="rtl"
+                  className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-amber-950/95 border-2 border-amber-400 text-amber-200 px-4 py-1.5 rounded-full text-[11px] sm:text-xs font-black shadow-2xl flex items-center gap-2 animate-bounce whitespace-nowrap"
+                >
+                  <span className="text-sm">🎯</span>
+                  <span>الخصم أسقط كرتك! انقر على أي جيب مضيء على الطاولة لتحديد جيب الكرة 8</span>
+                </div>
+              )}
+
+              {isBallInHand && !awaitingOneFifteenPocketPick && (
                 <div
                   dir="rtl"
                   className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border-2 border-amber-400 text-amber-300 px-3 py-1.5 rounded-full text-[10px] sm:text-xs font-black shadow-2xl flex items-center gap-2.5 whitespace-nowrap"
                 >
                   <span className="text-sm animate-pulse">✋</span>
                   <span>
-                    {mode === "snooker"
-                      ? "الكرة بيدك: حرّكها لأي مكان خلف الخط"
-                      : mode === "one-fifteen"
-                      ? "الكرة بيدك: اسحبها بحرية خلف الخط — يمكنك تغيير مكانها كما تشاء"
-                      : "الكرة بيدك: اسحبها بحرية — يمكنك تغيير مكانها وتعديلها كما تشاء"}
+                    الكرة بيدك: اسحب الكرة لتغيير مكانها، والمس خارجها للتصويب أو اسحب القوة للضرب
                   </span>
                   <button
                     type="button"
@@ -1699,7 +1749,7 @@ function CueMasterApp() {
                     className="px-2.5 py-0.5 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-[10px] sm:text-[11px] cursor-pointer shadow flex items-center gap-1 transition-all"
                   >
                     <span>✓</span>
-                    <span>تثبيت الكرة</span>
+                    <span>تثبيت</span>
                   </button>
                 </div>
               )}
@@ -1778,47 +1828,7 @@ function CueMasterApp() {
         </div>
       )}
 
-      {oneFifteenChoiceModal && (
-        <div
-          dir="rtl"
-          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-        >
-          <div className="bg-[#0b121e] border-2 border-amber-400/90 rounded-3xl w-full max-w-sm sm:max-w-md p-5 shadow-2xl space-y-3.5 text-center">
-            <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-2xl">
-              🎱
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-amber-300">
-              اختر جيب الكرة السوداء 8 (البلاك)
-            </h3>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              وفقاً لقوانين لعبة 1 و 15: لا يجوز إجبارك على إسقاط الكرة السوداء في جيب الميدل (الوسط). اختر جيب الركن المفضل لديك للكرة 8:
-            </p>
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              {CORNER_POCKET_IDS.map((pId) => {
-                const pObj = getActiveGeom().pockets[pId];
-                const isTaken = oneFifteenBotEightPocket === pId;
-                return (
-                  <button
-                    key={pId}
-                    type="button"
-                    disabled={isTaken}
-                    onClick={() => handleChooseOneFifteenEightPocket(pId)}
-                    className={`p-3 rounded-2xl border font-black text-xs flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                      isTaken
-                        ? "bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed opacity-50"
-                        : "bg-slate-800 hover:bg-amber-400 hover:text-slate-950 border-amber-400/40 text-amber-300 active:scale-95 shadow-md"
-                    }`}
-                  >
-                    <span className="text-base">🎯</span>
-                    <span>{pObj?.name || `جيب ${pId}`}</span>
-                    {isTaken && <span className="text-[10px] text-rose-400">(محجوز للخصم)</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {matchmakingPending && (
         <MatchmakingOverlay

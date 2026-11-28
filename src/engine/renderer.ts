@@ -107,6 +107,7 @@ export interface RenderSceneParams {
   calledPocketId: number | null;
   oneFifteenHumanEightPocket?: number | null;
   oneFifteenBotEightPocket?: number | null;
+  awaitingOneFifteenPocketPick?: boolean;
   humanGroup: BallGroup;
   snookerTarget?: SnookerTargetInfo;
   aimAngle: number;
@@ -144,6 +145,7 @@ export function renderTableScene({
   calledPocketId,
   oneFifteenHumanEightPocket,
   oneFifteenBotEightPocket,
+  awaitingOneFifteenPocketPick = false,
   humanGroup,
   snookerTarget,
   aimAngle,
@@ -303,6 +305,36 @@ export function renderTableScene({
 
   // 2. Pocket Target Call Highlight (Ring aligned flush to exact outer black pocket rim)
   if (mode === "one-fifteen") {
+    // If awaiting pocket pick from player: illuminate all available pockets directly on table
+    if (awaitingOneFifteenPocketPick) {
+      const time = performance.now() * 0.005;
+      const pulseR = Math.sin(time) * 3;
+      ctx.save();
+      ctx.direction = "rtl";
+      ctx.textAlign = "center";
+      for (let i = 0; i < pockets.length; i++) {
+        const isTakenByBot = oneFifteenBotEightPocket === i;
+        if (isTakenByBot) continue;
+        const p = pockets[i];
+        ctx.strokeStyle = "rgba(250, 204, 21, 0.95)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 3]);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r + 3 + pulseR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(250, 204, 21, 0.28)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#fef08a";
+        ctx.font = "bold 10px 'Segoe UI', Tahoma, Arial, sans-serif";
+        ctx.fillText("اختر الجيب 🎯", p.x, p.y + (p.y < TABLE_HEIGHT / 2 ? p.r + 14 : -(p.r + 6)));
+      }
+      ctx.restore();
+    }
+
     // Show designated pockets for 1 & 15 mode
     if (oneFifteenHumanEightPocket !== null && oneFifteenHumanEightPocket !== undefined) {
       const p = pockets[oneFifteenHumanEightPocket];
@@ -583,7 +615,7 @@ export function renderTableScene({
 
   // 5. Aim Line Raycasting + Cue Ball Post-Collision Path + Bank Preview + Cue Stick
   const canShowAim =
-    !isShooting && !isBallInHand && cueBall && !cueBall.isPotted && (turn === "human" || isPractice || isBotAiming);
+    !isShooting && cueBall && !cueBall.isPotted && (turn === "human" || isPractice || isBotAiming);
   if (canShowAim) {
     const cosA = Math.cos(aimAngle);
     const sinA = Math.sin(aimAngle);
