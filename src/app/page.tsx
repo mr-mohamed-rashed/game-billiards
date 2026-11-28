@@ -164,6 +164,9 @@ function CueMasterApp() {
 
   // Gesture & Shot Refs
   const isAimDraggingRef = useRef(false);
+  const isPullBackShootingRef = useRef(false);
+  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const dragStartAimAngleRef = useRef(0);
   const isDraggingBallInHandRef = useRef(false);
   const isDraggingBreakCueRef = useRef(false);
   const isHoveringBreakCueRef = useRef(false);
@@ -1031,6 +1034,43 @@ function CueMasterApp() {
     syncCanvasCursor();
 
     if (cueBall && (isAimDraggingRef.current || e.buttons === 1)) {
+      const lockedAngle = dragStartAimAngleRef.current;
+      const startPos = dragStartPosRef.current || { x: cueBall.x, y: cueBall.y };
+
+      // Direction vector of the shot
+      const forwardX = Math.cos(lockedAngle);
+      const forwardY = Math.sin(lockedAngle);
+
+      // Drag displacement vector from pointer down position
+      const deltaX = coords.x - startPos.x;
+      const deltaY = coords.y - startPos.y;
+
+      // Project displacement along the cue stick axis (positive = forward towards target, negative = backwards)
+      const forwardDisp = deltaX * forwardX + deltaY * forwardY;
+      const perpDisp = Math.abs(deltaX * (-forwardY) + deltaY * forwardX);
+
+      // When dragging backwards opposite to cue direction: charge power & lock aim!
+      // "اما نظبطه ونشد لورا على الشاشه عكس اتجاه المضرب يحمل انه يلعب وميحركش الاتجاه المختار"
+      if (isPullBackShootingRef.current || (forwardDisp < -10 && perpDisp < Math.abs(forwardDisp) * 0.95)) {
+        isPullBackShootingRef.current = true;
+        // Keep aim angle completely locked so it does NOT move
+        aimAngleRef.current = lockedAngle;
+
+        const pullDist = -forwardDisp;
+        if (pullDist > 0) {
+          const pct = Math.min(100, Math.max(0, Math.round((pullDist / 140) * 100)));
+          powerRef.current = pct;
+          setPower(pct);
+          applyPowerVisual(pct);
+        } else {
+          powerRef.current = 0;
+          setPower(0);
+          applyPowerVisual(0);
+        }
+        return;
+      }
+
+      // Otherwise: Adjust aim angle smoothly with low sensitivity (damping)
       const dx = coords.x - cueBall.x;
       const dy = coords.y - cueBall.y;
       const dist = Math.hypot(dx, dy);
@@ -1040,11 +1080,13 @@ function CueMasterApp() {
         if (diff > Math.PI) diff -= Math.PI * 2;
         if (diff < -Math.PI) diff += Math.PI * 2;
 
-        // Damping factor for weighted, steady aiming ("يتقل شويه"):
-        // Small micro-adjustments use heavier damping (0.35) for rock-solid stability;
-        // Faster sweeps follow smoothly (0.52).
-        const damping = Math.abs(diff) < 0.12 ? 0.35 : 0.52;
+        // Smooth damping for fine, steady aiming ("السهم الحساسيه بتاعته عاليه")
+        const damping = Math.abs(diff) < 0.1 ? 0.24 : 0.42;
         aimAngleRef.current += diff * damping;
+
+        // Keep anchor in sync so subsequent pull-back engages smoothly
+        dragStartAimAngleRef.current = aimAngleRef.current;
+        dragStartPosRef.current = { x: coords.x, y: coords.y };
 
         const now = performance.now();
         aimAngleHistoryRef.current.push({ angle: aimAngleRef.current, time: now });
@@ -1140,11 +1182,16 @@ function CueMasterApp() {
       }
 
       isAimDraggingRef.current = true;
+      isPullBackShootingRef.current = false;
+      dragStartPosRef.current = { x: coords.x, y: coords.y };
+      dragStartAimAngleRef.current = aimAngleRef.current;
+      powerRef.current = 0;
       if (cueBall) {
         const dx = coords.x - cueBall.x;
         const dy = coords.y - cueBall.y;
         if (Math.hypot(dx, dy) > 8) {
           aimAngleRef.current = Math.atan2(dy, dx);
+          dragStartAimAngleRef.current = aimAngleRef.current;
           aimAngleHistoryRef.current = [{ angle: aimAngleRef.current, time: performance.now() }];
         }
       }
@@ -1171,6 +1218,25 @@ function CueMasterApp() {
       try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
       return;
     }
+    if (isPullBackShootingRef.current) {
+      isPullBackShootingRef.current = false;
+      isAimDraggingRef.current = false;
+      const finalPower = powerRef.current;
+      dragStartPosRef.current = null;
+      aimAngleHistoryRef.current = [];
+      if (finalPower >= 10 && (isPracticeRef.current || turnRef.current === "human") && !isShootingRef.current) {
+        if (isBallInHandRef.current) confirmBallInHand();
+        handleShoot(finalPower);
+      } else {
+        powerRef.current = 0;
+        setPower(0);
+        applyPowerVisual(0);
+      }
+      syncCanvasCursor();
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+      return;
+    }
+
     if (isAimDraggingRef.current) {
       isAimDraggingRef.current = false;
       // Filter out finger-lift jitter:
@@ -1191,9 +1257,14 @@ function CueMasterApp() {
 
   const handleCanvasPointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     isAimDraggingRef.current = false;
+    isPullBackShootingRef.current = false;
+    dragStartPosRef.current = null;
     isDraggingBallInHandRef.current = false;
     isDraggingBreakCueRef.current = false;
     isHoveringBreakCueRef.current = false;
+    powerRef.current = 0;
+    setPower(0);
+    applyPowerVisual(0);
     syncCanvasCursor();
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
   };
