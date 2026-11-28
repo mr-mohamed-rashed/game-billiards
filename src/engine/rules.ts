@@ -13,7 +13,7 @@ import {
   getSnookerTargetInfo,
 } from "@/types/billiards";
 import { findFreeCueBallPos, placeCueBallSafely, respotBall } from "@/engine/physics";
-import { playFoulBuzzer } from "@/utils/audio";
+import { playFoulBuzzer, playMissedSound } from "@/utils/audio";
 
 export interface ShotOutcomeContext {
   mode: GameMode;
@@ -574,27 +574,8 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     } else if (!isPractice) {
       const nextT = activeShooter === "human" ? "bot" : "human";
       onTurnChange(nextT);
-      if (pottedOnlyOpponent) {
-        onMessage(
-          nextT === "human"
-            ? "🎉 الخصم أسقط إحدى كراتك! بقيت في الجيب ودورك الآن."
-            : "⚠️ أسقطت كرة للخصم! بقيت في الجيب ودور الخصم الآن."
-        );
-      } else if (pottedInWrongPocket) {
-        if (isOneFifteen) {
-          onMessage(
-            nextT === "human"
-              ? "🎯 الخصم أخطأ الجيب! خرجت كرته ودورك الآن."
-              : "🎯 لم تحدد الجيب الصحيح لكرتك! خرجت الكرة وانتقل الدور للخصم."
-          );
-        } else {
-          onMessage(
-            nextT === "human"
-              ? "🎯 الخصم أخطأ الجيب المحدد! دورك الآن."
-              : "🎯 الكرة سقطت في جيب غير الجيب المحدد! دور الخصم."
-          );
-        }
-      } else if (nextT === "human") {
+      if (soundEnabled) playMissedSound();
+      if (nextT === "human") {
         onMessage(
           remainingHumanAfter.length === 0 && updatedHumanGroup !== "unassigned"
             ? "🏆 دورك على الكرة 8! اضغط على الجيب الهدف أولاً."
@@ -603,12 +584,9 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       } else {
         onMessage("دور الخصم الآن...");
       }
-    } else if (pottedInWrongPocket) {
-      onMessage(
-        isOneFifteen
-          ? "🎯 لم تحدد الجيب الصحيح لكرتك! خرجت الكرة للطاولة."
-          : "🎯 الكرة سقطت في جيب غير الجيب المحدد!"
-      );
+    } else {
+      if (soundEnabled) playMissedSound();
+      onMessage("لم تسقط الكرة!");
     }
   } else {
     // Snooker mode
@@ -826,10 +804,12 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
         if (!isPractice) {
           const nextTurn = activeShooter === "human" ? "bot" : "human";
           onTurnChange(nextTurn);
+          if (soundEnabled) playMissedSound();
           onMessage(
             nextTurn === "human" ? `دورك الآن! ${nextHint}` : `دور الخصم الآن (${nextHint})...`
           );
         } else {
+          if (soundEnabled) playMissedSound();
           onMessage(`لم تسقط الكرة! ${nextHint}`);
         }
       }
@@ -889,10 +869,12 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
         if (!isPractice) {
           const nextTurn = activeShooter === "human" ? "bot" : "human";
           onTurnChange(nextTurn);
+          if (soundEnabled) playMissedSound();
           onMessage(
             nextTurn === "human" ? `دورك الآن! ${nextHint}` : `دور الخصم الآن (${nextHint})...`
           );
         } else {
+          if (soundEnabled) playMissedSound();
           onMessage(`لم تسقط الكرة! ${nextHint}`);
         }
       }

@@ -130,6 +130,36 @@ export function playFoulBuzzer() {
   osc.stop(t + 0.28);
 }
 
+export function playMissedSound() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const t = ctx.currentTime;
+
+  // Realistic cue sports missed shot sound (subtle soft descending tone)
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(260, t);
+  osc.frequency.exponentialRampToValueAtTime(170, t + 0.12);
+  osc.frequency.exponentialRampToValueAtTime(120, t + 0.26);
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(380, t);
+  filter.frequency.exponentialRampToValueAtTime(150, t + 0.26);
+
+  gain.gain.setValueAtTime(0.32, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(t);
+  osc.stop(t + 0.28);
+}
+
 export function playSuccessChime() {
   const ctx = getAudioContext();
   if (!ctx) return;
