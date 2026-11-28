@@ -273,59 +273,6 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       return;
     }
 
-    // 3. 1 & 15 Uncalled Safety Rule (2-shot visit when pocket is NOT called on non-break shot)
-    if (isOneFifteen && !wasBreakShot && targetPocketForThisShot === null) {
-      if (pottedList.length > 0) {
-        for (const entry of pottedList) {
-          const isOpponentBall =
-            shooterGroup !== "unassigned" &&
-            entry.ball.type !== (shooterGroup === "solids" ? "solid" : "stripe");
-          if (entry.ball.number !== 8 && !isOpponentBall) respotBall(entry.ball, balls, tableGeom);
-        }
-        onOneFifteenUncalledCountChange?.(0);
-        if (!isPractice) {
-          const nextT = activeShooter === "human" ? "bot" : "human";
-          onTurnChange(nextT);
-          onMessage(
-            nextT === "human"
-              ? "🎯 الخصم أسقط كرة بدون تحديد جيب! عادت لنقطة المثلث وانتقل المضرب لك."
-              : "🎯 نزلت كرة بدون تحديد جيب! عادت لنقطة المثلث وانتقل المضرب للخصم."
-          );
-        } else {
-          onMessage("🎯 نزلت كرة بدون تحديد جيب! عادت لنقطة المثلث.");
-        }
-        return;
-      }
-
-      if (oneFifteenUncalledCount === 0) {
-        onOneFifteenUncalledCountChange?.(1);
-        onMessage(
-          activeShooter === "human"
-            ? "🟡 الضربة الأولى (بدون تحديد جيب): لك ضربة ثانية — حدد جيب أو العب بحرية!"
-            : "🤖 الخصم لعب ضربة أمان أولى وله ضربة ثانية..."
-        );
-        return;
-      }
-
-      onOneFifteenUncalledCountChange?.(0);
-      if (!isPractice) {
-        const nextT = activeShooter === "human" ? "bot" : "human";
-        onTurnChange(nextT);
-        onMessage(
-          nextT === "human"
-            ? "انتهت ضربتا الخصم — دورك الآن!"
-            : "انتهت الضربتان بدون تحديد جيب — دور الخصم."
-        );
-      } else {
-        onMessage("انتهت الضربتان — يمكنك التصويب من جديد.");
-      }
-      return;
-    }
-
-    if (isOneFifteen) {
-      onOneFifteenUncalledCountChange?.(0);
-    }
-
     // 4. Open Pockets / Called Pocket & Special 1 & 15 Pocket Checks
     let updatedHumanGroup = humanGroup;
     let updatedBotGroup = botGroup;
@@ -377,7 +324,14 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       if (isOneFifteen) {
         if (entry.ball.number === 1) return entry.pocketId === ONE_FIFTEEN_POCKET_1;
         if (entry.ball.number === 15) return entry.pocketId === ONE_FIFTEEN_POCKET_15;
-        return targetPocketForThisShot !== null && entry.pocketId === targetPocketForThisShot;
+        if (entry.ball.number === 8) {
+          const designated = activeShooter === "human" ? oneFifteenHumanEightPocket : oneFifteenBotEightPocket;
+          if (designated !== null && designated !== undefined) {
+            return entry.pocketId === designated;
+          }
+        }
+        // Regular balls in 1 & 15 (2-7 and 9-14) can go into ANY pocket!
+        return true;
       }
       return targetPocketForThisShot === null || entry.pocketId === targetPocketForThisShot;
     };

@@ -955,7 +955,7 @@ export function computeBotShot(
         : Math.atan2(closest.y - cueBall.y, closest.x - cueBall.x);
     return {
       angle: fallbackAngle,
-      pocketId: mode === "one-fifteen" ? null : pockets[0].id,
+      pocketId: pockets[0].id,
       speed: 20,
     };
   }
