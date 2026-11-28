@@ -330,17 +330,53 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     let updatedHumanGroup = humanGroup;
     let updatedBotGroup = botGroup;
 
+    // First: If groups are unassigned and any object ball (solid or stripe) was potted:
+    // Breaker or shooter immediately claims that type and continues playing!
+    if (humanGroup === "unassigned" && pottedList.length > 0) {
+      const firstObjectEntry = pottedList.find(
+        (e) => e.ball.type === "solid" || e.ball.type === "stripe"
+      );
+      if (firstObjectEntry) {
+        const isSolid = firstObjectEntry.ball.type === "solid";
+        if (activeShooter === "human") {
+          updatedHumanGroup = isSolid ? "solids" : "stripes";
+          updatedBotGroup = isSolid ? "stripes" : "solids";
+          onAssignGroups(updatedHumanGroup, updatedBotGroup, {
+            title: wasBreakShot ? "🎉 تم تعيين الصنف من الكسرة!" : "🎉 تم تعيين الصنف!",
+            human: isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)",
+            bot: isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)",
+          });
+        } else {
+          updatedBotGroup = isSolid ? "solids" : "stripes";
+          updatedHumanGroup = isSolid ? "stripes" : "solids";
+          onAssignGroups(updatedHumanGroup, updatedBotGroup, {
+            title: wasBreakShot ? "🤖 الخصم عيّن الأصناف من الكسرة!" : "🤖 الخصم عيّن الأصناف!",
+            human: isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)",
+            bot: isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)",
+          });
+        }
+      }
+    }
+
+    const currentShooterGroup = activeShooter === "human" ? updatedHumanGroup : updatedBotGroup;
+
+    const isOpponentBall = (ball: Ball): boolean => {
+      if (currentShooterGroup === "unassigned") return false;
+      const ownType = currentShooterGroup === "solids" ? "solid" : "stripe";
+      return ball.type !== ownType && ball.number !== 8;
+    };
+
     const isEntryPocketLegal = (entry: { ball: Ball; pocketId: number }): boolean => {
+      // On the break shot, any potted ball is 100% legal and stays down!
+      if (wasBreakShot) return true;
+
+      // Opponent's ball dropped accidentally or intentionally NEVER comes out:
+      // "لو اللاعب نزل كره غصب عنه للخصم مش بتطلع ده غلطه وبيتحمله"
+      if (isOpponentBall(entry.ball)) return true;
+
       if (isOneFifteen) {
-        if (entry.ball.number === 1) {
-          if (entry.pocketId !== ONE_FIFTEEN_POCKET_1) return false;
-          return wasBreakShot || targetPocketForThisShot === ONE_FIFTEEN_POCKET_1;
-        }
-        if (entry.ball.number === 15) {
-          if (entry.pocketId !== ONE_FIFTEEN_POCKET_15) return false;
-          return wasBreakShot || targetPocketForThisShot === ONE_FIFTEEN_POCKET_15;
-        }
-        if (wasBreakShot) return true;
+        if (entry.ball.number === 1) return entry.pocketId === ONE_FIFTEEN_POCKET_1;
+        if (entry.ball.number === 15) return entry.pocketId === ONE_FIFTEEN_POCKET_15;
         return targetPocketForThisShot !== null && entry.pocketId === targetPocketForThisShot;
       }
       return targetPocketForThisShot === null || entry.pocketId === targetPocketForThisShot;
@@ -353,10 +389,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     // but if opponent's ball fell, it stays in the pocket ("هو الخصم نزلها متطلعش")!
     if (isOneFifteen && invalidPocketEntries.length > 0) {
       for (const bad of invalidPocketEntries) {
-        const isOpponentBall =
-          shooterGroup !== "unassigned" &&
-          bad.ball.type !== (shooterGroup === "solids" ? "solid" : "stripe");
-        if (!isOpponentBall) {
+        if (!isOpponentBall(bad.ball)) {
           respotBall(bad.ball, balls, tableGeom);
         }
       }
@@ -381,37 +414,11 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       validPocketEntries.length === 0 &&
       !cornerCalled1Or15;
 
-    if (humanGroup === "unassigned" && legalPottedBalls.length > 0) {
-      const firstLegal = legalPottedBalls.find((b) => b.type === "solid" || b.type === "stripe");
-      if (firstLegal) {
-        const isSolid = firstLegal.type === "solid";
-        if (activeShooter === "human") {
-          updatedHumanGroup = isSolid ? "solids" : "stripes";
-          updatedBotGroup = isSolid ? "stripes" : "solids";
-          onAssignGroups(updatedHumanGroup, updatedBotGroup, {
-            title: "🎉 تم تعيين الصنف!",
-            human: isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)",
-            bot: isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)",
-          });
-        } else {
-          updatedBotGroup = isSolid ? "solids" : "stripes";
-          updatedHumanGroup = isSolid ? "stripes" : "solids";
-          onAssignGroups(updatedHumanGroup, updatedBotGroup, {
-            title: "🤖 الخصم عيّن الأصناف!",
-            human: isSolid ? "ألوان 🔵 (9-15)" : "سادة 🟡 (1-7)",
-            bot: isSolid ? "سادة 🟡 (1-7)" : "ألوان 🔵 (9-15)",
-          });
-        }
-      }
-    }
-
-    const currentShooterGroup = activeShooter === "human" ? updatedHumanGroup : updatedBotGroup;
-    const pottedOwnBall = legalPottedBalls.some((b) =>
+    const ownType = currentShooterGroup === "solids" ? "solid" : "stripe";
+    const pottedOwnBall = validPocketEntries.some((entry) =>
       currentShooterGroup === "unassigned"
-        ? b.type === "solid" || b.type === "stripe"
-        : currentShooterGroup === "solids"
-        ? b.type === "solid"
-        : b.type === "stripe"
+        ? entry.ball.type === "solid" || entry.ball.type === "stripe"
+        : entry.ball.type === ownType
     );
 
     const remainingHumanAfter = balls.filter(
@@ -527,8 +534,17 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
       }
     }
 
+    const pottedOpponentBalls = pottedList.filter((e) => isOpponentBall(e.ball));
+    const pottedOnlyOpponent = pottedOpponentBalls.length > 0 && !pottedOwnBall;
+
     if (pottedOwnBall || cornerCalled1Or15) {
-      if (cornerCalled1Or15 && !pottedOwnBall) {
+      if (wasBreakShot) {
+        onMessage(
+          activeShooter === "human"
+            ? "🔥 ضربة كسرة ممتازة! أحرزت كرة وتم تحديد صنفك، دورك مستمر."
+            : "🤖 الخصم أحرز كرة من الكسرة وتم تحديد صنفه، دوره مستمر..."
+        );
+      } else if (cornerCalled1Or15 && !pottedOwnBall) {
         onMessage(
           activeShooter === "human"
             ? "🟡 نزلت 1 أو 15 في الركن المحدد: خرجت لنقطة المثلث والمضرب معاك!"
@@ -558,12 +574,18 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     } else if (!isPractice) {
       const nextT = activeShooter === "human" ? "bot" : "human";
       onTurnChange(nextT);
-      if (pottedInWrongPocket) {
+      if (pottedOnlyOpponent) {
+        onMessage(
+          nextT === "human"
+            ? "🎉 الخصم أسقط إحدى كراتك! بقيت في الجيب ودورك الآن."
+            : "⚠️ أسقطت كرة للخصم! بقيت في الجيب ودور الخصم الآن."
+        );
+      } else if (pottedInWrongPocket) {
         if (isOneFifteen) {
           onMessage(
             nextT === "human"
-              ? "🎯 الخصم أخطأ الجيب! خرجت الكرة ودورك الآن."
-              : "🎯 لم تحدد الجيب الصحيح! خرجت الكرة وانتقل الدور للخصم."
+              ? "🎯 الخصم أخطأ الجيب! خرجت كرته ودورك الآن."
+              : "🎯 لم تحدد الجيب الصحيح لكرتك! خرجت الكرة وانتقل الدور للخصم."
           );
         } else {
           onMessage(
@@ -584,7 +606,7 @@ export function resolveShotOutcome(ctx: ShotOutcomeContext) {
     } else if (pottedInWrongPocket) {
       onMessage(
         isOneFifteen
-          ? "🎯 لم تحدد الجيب الصحيح! خرجت الكرة للطاولة."
+          ? "🎯 لم تحدد الجيب الصحيح لكرتك! خرجت الكرة للطاولة."
           : "🎯 الكرة سقطت في جيب غير الجيب المحدد!"
       );
     }

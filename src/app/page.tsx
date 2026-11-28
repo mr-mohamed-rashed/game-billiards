@@ -123,6 +123,7 @@ function CueMasterApp() {
   const [oneFifteenHumanEightPocket, setOneFifteenHumanEightPocket] = useState<number | null>(null);
   const [oneFifteenBotEightPocket, setOneFifteenBotEightPocket] = useState<number | null>(null);
   const [awaitingOneFifteenPocketPick, setAwaitingOneFifteenPocketPick] = useState(false);
+  const [pottedBallsHistory, setPottedBallsHistory] = useState<Ball[]>([]);
   const [isBallInHand, setIsBallInHand] = useState(false);
   const [isBreakShot, setIsBreakShot] = useState(true);
   const [humanScore, setHumanScore] = useState(0);
@@ -214,6 +215,7 @@ function CueMasterApp() {
   const shotStartPosRef = useRef({ x: 200, y: 225 });
   const firstBallHitInShotRef = useRef<Ball | null>(null);
   const pottedInCurrentShotRef = useRef<{ ball: Ball; pocketId: number }[]>([]);
+  const pottedBallsHistoryRef = useRef<Ball[]>([]);
   const cueScratchedInShotRef = useRef(false);
 
   // Sync React state -> refs
@@ -433,6 +435,8 @@ function CueMasterApp() {
     setOneFifteenBotEightPocket(null);
     awaitingOneFifteenPocketPickRef.current = false;
     setAwaitingOneFifteenPocketPick(false);
+    pottedBallsHistoryRef.current = [];
+    setPottedBallsHistory([]);
     aimAngleHistoryRef.current = [];
     isBreakShotRef.current = true;
     isDraggingBreakCueRef.current = false;
@@ -739,6 +743,18 @@ function CueMasterApp() {
         cueScratchedInShotRef.current = false;
         firstBallHitInShotRef.current = null;
 
+        if (pottedList.length > 0) {
+          for (const entry of pottedList) {
+            if (
+              entry.ball.number !== 0 &&
+              !pottedBallsHistoryRef.current.some((b) => b.id === entry.ball.id)
+            ) {
+              pottedBallsHistoryRef.current.push(entry.ball);
+            }
+          }
+          setPottedBallsHistory([...pottedBallsHistoryRef.current]);
+        }
+
         const shotCalledPocket = activeShotCalledPocketRef.current;
         activeShotCalledPocketRef.current = null;
         calledPocketIdRef.current = null;
@@ -821,6 +837,10 @@ function CueMasterApp() {
           },
           onMessage: setTurnMessage,
         });
+
+        // Ensure potted balls strip matches all currently pocketed balls in drop order
+        pottedBallsHistoryRef.current = pottedBallsHistoryRef.current.filter((b) => b.isPotted);
+        setPottedBallsHistory([...pottedBallsHistoryRef.current]);
       }
 
       // ALWAYS schedule next frame unconditionally so scratches/fouls never freeze the loop
@@ -1822,6 +1842,60 @@ function CueMasterApp() {
                   }}
                   className="rounded-xl sm:rounded-2xl border-2 sm:border-4 touch-none select-none block"
                 />
+              </div>
+
+              {/* شريط الكرات المسقطة بالترتيب */}
+              <div
+                dir="rtl"
+                className="absolute bottom-1 sm:bottom-2 left-1/2 -translate-x-1/2 z-20 max-w-[96%] flex items-center gap-1.5 sm:gap-2 px-3 py-1 rounded-full bg-slate-950/85 backdrop-blur-md border border-amber-500/40 shadow-2xl overflow-x-auto no-scrollbar pointer-events-auto"
+              >
+                <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-black text-amber-300 shrink-0 select-none">
+                  <span className="text-xs">🎱</span>
+                  <span>الكرات المسقطة:</span>
+                </div>
+                {pottedBallsHistory.length === 0 ? (
+                  <span className="text-[9px] sm:text-[10px] font-medium text-slate-400 shrink-0 italic">
+                    لم تسقط أي كرة بعد
+                  </span>
+                ) : (
+                  <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                    {pottedBallsHistory.map((b, idx) => (
+                      <div
+                        key={`${b.id}-${idx}`}
+                        className="relative flex items-center justify-center group"
+                        title={`الكرة #${b.number} — الترتيب: ${idx + 1}`}
+                      >
+                        <div
+                          className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border border-white/70 flex items-center justify-center text-[7.5px] sm:text-[8.5px] font-black shadow-md transition-transform transform group-hover:scale-125 select-none"
+                          style={{
+                            background:
+                              b.type === "stripe"
+                                ? `linear-gradient(to bottom, #ffffff 24%, ${b.color} 24%, ${b.color} 76%, #ffffff 76%)`
+                                : b.color,
+                            color:
+                              b.number === 8 ||
+                              b.type === "color" ||
+                              b.number === 2 ||
+                              b.number === 4 ||
+                              b.number === 6 ||
+                              b.number === 7 ||
+                              b.number === 10 ||
+                              b.number === 12 ||
+                              b.number === 14 ||
+                              b.number === 15
+                                ? "#ffffff"
+                                : "#0f172a",
+                          }}
+                        >
+                          {b.number}
+                        </div>
+                        <span className="absolute -top-4 bg-slate-900/95 border border-amber-400 text-amber-300 text-[8px] font-mono font-bold px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-30">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </main>
           </div>
